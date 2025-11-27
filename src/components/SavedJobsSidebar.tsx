@@ -81,38 +81,54 @@ export const SavedJobsSidebar = () => {
     }
   };
 
-  const handleExport = () => {
-    if (subscriptionTier !== "pro") {
-      setShowPricing(true);
-      return;
+  const handleExport = async () => {
+    try {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      
+      if (!token) {
+        toast({
+          title: "Authentication required",
+          description: "Please sign in to export jobs",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("export-saved-jobs", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (error) {
+        if (error.message?.includes("Pro subscription required") || error.message?.includes("403")) {
+          setShowPricing(true);
+          return;
+        }
+        throw error;
+      }
+
+      // Create blob and download
+      const blob = new Blob([data], { type: "text/csv" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `saved-jobs-${new Date().toISOString().split("T")[0]}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Export successful",
+        description: "Your saved jobs have been exported",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Export failed",
+        description: error.message || "Failed to export jobs",
+        variant: "destructive",
+      });
     }
-
-    const jobsToExport = savedJobs.filter(job => 
-      selectedJobs.size === 0 || selectedJobs.has(job.id)
-    );
-
-    const csv = [
-      ["Title", "Company", "Location", "Apply URL"],
-      ...jobsToExport.map(job => [
-        job.jobs.title,
-        job.jobs.company,
-        job.jobs.location,
-        job.jobs.apply_url,
-      ]),
-    ].map(row => row.join(",")).join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `saved-jobs-${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-
-    toast({
-      title: "Export successful",
-      description: `Exported ${jobsToExport.length} jobs`,
-    });
   };
 
   return (
