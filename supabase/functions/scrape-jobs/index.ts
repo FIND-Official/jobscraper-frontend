@@ -54,42 +54,57 @@ const sanitizeUrl = (url: string | null | undefined): string => {
 };
 
 async function scrapeWeWorkRemotely(): Promise<Job[]> {
-  console.log("[SCRAPER] Fetching We Work Remotely RSS...");
+  console.log("[SCRAPER] Fetching We Work Remotely HTML...");
   try {
-    const response = await fetch("https://weworkremotely.com/remote-jobs.rss");
-    const text = await response.text();
+    const response = await fetch("https://weworkremotely.com/", {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; JobScraper/1.0)'
+      }
+    });
+    const html = await response.text();
     
     const jobs: Job[] = [];
-    const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+    
+    // Parse job listings using regex to match the HTML structure
+    // Looking for: <li class="...new-listing-container...">
+    const listingRegex = /<li[^>]*class="[^"]*new-listing-container[^"]*"[^>]*>([\s\S]*?)<\/li>/g;
     let match;
     
-    while ((match = itemRegex.exec(text)) !== null) {
-      const itemContent = match[1];
+    while ((match = listingRegex.exec(html)) !== null) {
+      const listingHtml = match[1];
       
-      const titleMatch = /<title><!\[CDATA\[(.*?)\]\]><\/title>/.exec(itemContent);
-      const linkMatch = /<link>(.*?)<\/link>/.exec(itemContent);
-      const descMatch = /<description><!\[CDATA\[(.*?)\]\]><\/description>/.exec(itemContent);
-      const pubDateMatch = /<pubDate>(.*?)<\/pubDate>/.exec(itemContent);
-      const categoryMatch = /<category><!\[CDATA\[(.*?)\]\]><\/category>/.exec(itemContent);
+      // Extract job title from: <h4 class="new-listing__header__title">
+      const titleMatch = /<h4[^>]*class="[^"]*new-listing__header__title[^"]*"[^>]*>([\s\S]*?)<\/h4>/.exec(listingHtml);
+      
+      // Extract job link from: <a href="/remote-jobs/...">
+      const linkMatch = /<a[^>]*href="(\/remote-jobs\/[^"]+)"/.exec(listingHtml);
+      
+      // Extract company from: <span class="new-listing__header__company">
+      const companyMatch = /<span[^>]*class="[^"]*new-listing__header__company[^"]*"[^>]*>([\s\S]*?)<\/span>/.exec(listingHtml);
+      
+      // Extract region/category
+      const regionMatch = /<span[^>]*class="[^"]*new-listing__region[^"]*"[^>]*>([\s\S]*?)<\/span>/.exec(listingHtml);
       
       if (titleMatch && linkMatch) {
-        const fullTitle = titleMatch[1];
-        const parts = fullTitle.split(":");
-        const company = sanitizeText(parts[0]?.trim(), 200) || "Unknown Company";
-        const title = sanitizeText(parts[1]?.trim() || fullTitle, 200) || "Untitled";
-        const url = sanitizeUrl(linkMatch[1]);
+        // Clean HTML tags from title
+        const rawTitle = titleMatch[1].replace(/<[^>]*>/g, '').trim();
+        const rawCompany = companyMatch?.[1]?.replace(/<[^>]*>/g, '').trim() || "Unknown Company";
+        const rawRegion = regionMatch?.[1]?.replace(/<[^>]*>/g, '').trim();
         
-        if (url) {
-          const category = sanitizeText(categoryMatch?.[1], 50);
+        const title = sanitizeText(rawTitle, 200) || "Untitled";
+        const company = sanitizeText(rawCompany, 200) || "Unknown Company";
+        const url = sanitizeUrl(`https://weworkremotely.com${linkMatch[1]}`);
+        
+        if (url && title !== "Untitled") {
           jobs.push({
             title,
             company,
             location: "Remote",
-            description: sanitizeText(descMatch?.[1]),
+            description: sanitizeText(rawRegion),
             apply_url: url,
             source: "We Work Remotely",
-            posted_date: pubDateMatch?.[1] ? new Date(pubDateMatch[1]).toISOString() : null,
-            tags: category ? [category] : null,
+            posted_date: new Date().toISOString(),
+            tags: rawRegion ? [sanitizeText(rawRegion, 50) || "Remote"] : ["Remote"],
           });
         }
       }
