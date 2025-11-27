@@ -9,7 +9,7 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <Header />
       
-      <main className="container mx-auto px-4 pt-24 pb-12">
+      <main className="container mx-auto px-4 pt-24 pb-12 pr-4 lg:pr-80">
         <div className="max-w-5xl">
           <JobSearch />
           
