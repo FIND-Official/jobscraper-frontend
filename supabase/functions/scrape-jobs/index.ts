@@ -9,14 +9,49 @@ const corsHeaders = {
 interface Job {
   title: string;
   company: string;
-  location: string;
-  job_type: string;
-  description: string;
+  location: string | null;
+  description: string | null;
   apply_url: string;
   source: string;
   posted_date: string | null;
-  tags: string[];
+  tags: string[] | null;
 }
+
+// Sanitize text content to prevent XSS and injection attacks
+const sanitizeText = (text: string | null | undefined, maxLength: number = 5000): string | null => {
+  if (!text) return null;
+  
+  // Remove HTML tags and scripts
+  let sanitized = String(text)
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<[^>]*>/g, '');
+  
+  // Remove dangerous characters and normalize whitespace
+  sanitized = sanitized
+    .replace(/[<>]/g, '')
+    .replace(/&lt;/g, '')
+    .replace(/&gt;/g, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+=/gi, '')
+    .trim();
+  
+  // Limit length
+  return sanitized.substring(0, maxLength);
+};
+
+const sanitizeUrl = (url: string | null | undefined): string => {
+  if (!url) return '';
+  try {
+    const parsedUrl = new URL(String(url));
+    // Only allow http and https protocols
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return '';
+    }
+    return url;
+  } catch {
+    return '';
+  }
+};
 
 async function scrapeWeWorkRemotely(): Promise<Job[]> {
   console.log("[SCRAPER] Fetching We Work Remotely RSS...");
@@ -40,25 +75,28 @@ async function scrapeWeWorkRemotely(): Promise<Job[]> {
       if (titleMatch && linkMatch) {
         const fullTitle = titleMatch[1];
         const parts = fullTitle.split(":");
-        const company = parts[0]?.trim() || "Unknown Company";
-        const title = parts[1]?.trim() || fullTitle;
+        const company = sanitizeText(parts[0]?.trim(), 200) || "Unknown Company";
+        const title = sanitizeText(parts[1]?.trim() || fullTitle, 200) || "Untitled";
+        const url = sanitizeUrl(linkMatch[1]);
         
-        jobs.push({
-          title,
-          company,
-          location: "Remote",
-          job_type: categoryMatch?.[1] || "Full-time",
-          description: descMatch?.[1] || "",
-          apply_url: linkMatch[1],
-          source: "We Work Remotely",
-          posted_date: pubDateMatch?.[1] || null,
-          tags: categoryMatch?.[1] ? [categoryMatch[1]] : [],
-        });
+        if (url) {
+          const category = sanitizeText(categoryMatch?.[1], 50);
+          jobs.push({
+            title,
+            company,
+            location: "Remote",
+            description: sanitizeText(descMatch?.[1]),
+            apply_url: url,
+            source: "We Work Remotely",
+            posted_date: pubDateMatch?.[1] ? new Date(pubDateMatch[1]).toISOString() : null,
+            tags: category ? [category] : null,
+          });
+        }
       }
     }
     
     console.log(`[SCRAPER] We Work Remotely: Found ${jobs.length} jobs`);
-    return jobs.slice(0, 50); // Limit to 50 jobs
+    return jobs.slice(0, 50);
   } catch (error) {
     console.error("[SCRAPER] We Work Remotely error:", error);
     return [];
@@ -68,24 +106,34 @@ async function scrapeWeWorkRemotely(): Promise<Job[]> {
 async function scrapeRemoteOK(): Promise<Job[]> {
   console.log("[SCRAPER] Fetching RemoteOK...");
   try {
-    const response = await fetch("https://remoteok.com/api");
+    const response = await fetch("https://remoteok.com/api", {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; JobScraper/1.0)'
+      }
+    });
     const data = await response.json();
     
     const jobs: Job[] = [];
     
-    for (const item of data.slice(1, 51)) { // Skip first item (metadata) and limit to 50
+    for (const item of data.slice(1, 51)) {
       if (item.position && item.company) {
-        jobs.push({
-          title: item.position,
-          company: item.company,
-          location: "Remote",
-          job_type: item.position_type || "Full-time",
-          description: item.description || "",
-          apply_url: item.apply_url || `https://remoteok.com/remote-jobs/${item.id}`,
-          source: "RemoteOK",
-          posted_date: item.date ? new Date(item.date).toISOString() : null,
-          tags: item.tags || [],
-        });
+        const url = sanitizeUrl(item.apply_url || `https://remoteok.com/remote-jobs/${item.id}`);
+        if (url) {
+          const tags = Array.isArray(item.tags) 
+            ? item.tags.slice(0, 10).map((tag: any) => sanitizeText(String(tag), 50)).filter(Boolean)
+            : null;
+            
+          jobs.push({
+            title: sanitizeText(item.position, 200) || "Untitled",
+            company: sanitizeText(item.company, 200) || "Unknown",
+            location: sanitizeText(item.location, 100) || "Remote",
+            description: sanitizeText(item.description),
+            apply_url: url,
+            source: "RemoteOK",
+            posted_date: item.date ? new Date(Number(item.date) * 1000).toISOString() : null,
+            tags: tags && tags.length > 0 ? tags : null,
+          });
+        }
       }
     }
     
@@ -98,16 +146,8 @@ async function scrapeRemoteOK(): Promise<Job[]> {
 }
 
 async function scrapeRemoteCom(): Promise<Job[]> {
-  console.log("[SCRAPER] Fetching Remote.com...");
-  try {
-    // Remote.com doesn't have a public API, so we'll return empty for now
-    // In production, you'd need to implement proper scraping or use their API if available
-    console.log("[SCRAPER] Remote.com: API not publicly available");
-    return [];
-  } catch (error) {
-    console.error("[SCRAPER] Remote.com error:", error);
-    return [];
-  }
+  console.log("[SCRAPER] Remote.com API not publicly available");
+  return [];
 }
 
 serve(async (req) => {
@@ -123,7 +163,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Scrape all sources in parallel
     const [wwrJobs, remoteOKJobs, remoteComJobs] = await Promise.all([
       scrapeWeWorkRemotely(),
       scrapeRemoteOK(),
@@ -133,12 +172,25 @@ serve(async (req) => {
     const allJobs = [...wwrJobs, ...remoteOKJobs, ...remoteComJobs];
     console.log(`[SCRAPER] Total jobs scraped: ${allJobs.length}`);
 
-    // Insert jobs into database (using upsert to avoid duplicates)
-    const { data, error } = await supabaseClient
+    if (allJobs.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          count: 0,
+          message: "No jobs found from any source" 
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        }
+      );
+    }
+
+    const { error } = await supabaseClient
       .from("jobs")
       .upsert(allJobs, {
         onConflict: "title,company,source",
-        ignoreDuplicates: true,
+        ignoreDuplicates: false,
       });
 
     if (error) {
@@ -159,10 +211,10 @@ serve(async (req) => {
         status: 200,
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error("[SCRAPER] Error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error?.message || String(error) }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,
