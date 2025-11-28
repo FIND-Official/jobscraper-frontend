@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { ContactDialog } from "./ContactDialog";
 import { PricingDialog } from "./PricingDialog";
 
@@ -37,12 +38,12 @@ export const Footer = () => {
               >
                 Help
               </button>
-              <a href="#privacy" className="text-muted-foreground hover:text-primary transition-colors">
+              <Link to="/terms-and-privacy" className="text-muted-foreground hover:text-primary transition-colors">
                 Privacy
-              </a>
-              <a href="#terms" className="text-muted-foreground hover:text-primary transition-colors">
+              </Link>
+              <Link to="/terms-and-privacy" className="text-muted-foreground hover:text-primary transition-colors">
                 Terms
-              </a>
+              </Link>
             </div>
           </div>
         </div>
