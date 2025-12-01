@@ -13,6 +13,13 @@ export const JobSearch = () => {
   const [selectedBoards, setSelectedBoards] = useState<Set<string>>(
     new Set(["We Work Remotely", "RemoteOK", "Remote.com"])
   );
+  const [scrapeCount, setScrapeCount] = useState(0);
+  const [showAuthWarning, setShowAuthWarning] = useState(false);
+
+  useEffect(() => {
+    const count = parseInt(localStorage.getItem("anonymousScrapeCount") || "0");
+    setScrapeCount(count);
+  }, []);
 
   const jobBoards = [
     { id: "wwr", name: "We Work Remotely" },
@@ -31,6 +38,22 @@ export const JobSearch = () => {
   };
 
   const handleScrape = async () => {
+    // Check if user is authenticated
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      // Anonymous user - check scrape limit
+      if (scrapeCount >= 2) {
+        toast({
+          title: "Sign up required",
+          description: "You've reached your limit. Sign up to continue scraping jobs!",
+          variant: "destructive",
+        });
+        setShowAuthWarning(true);
+        return;
+      }
+    }
+
     if (selectedBoards.size === 0) {
       toast({
         title: "Select job boards",
@@ -45,6 +68,13 @@ export const JobSearch = () => {
       const { data, error } = await supabase.functions.invoke("scrape-jobs");
       
       if (error) throw error;
+      
+      // Increment anonymous scrape count
+      if (!session) {
+        const newCount = scrapeCount + 1;
+        setScrapeCount(newCount);
+        localStorage.setItem("anonymousScrapeCount", newCount.toString());
+      }
       
       toast({
         title: "Jobs scraped!",
@@ -73,6 +103,11 @@ export const JobSearch = () => {
         <p className="text-muted-foreground">
           Select job boards, use filters and scrape the latest remote opportunities at in one place.
         </p>
+        {scrapeCount > 0 && scrapeCount < 2 && (
+          <p className="text-xs text-muted-foreground mt-2">
+            Anonymous scrapes remaining: {2 - scrapeCount}
+          </p>
+        )}
       </div>
 
       <div className="space-y-4">
