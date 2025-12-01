@@ -26,12 +26,39 @@ export const JobList = () => {
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const jobsPerPage = 10;
 
   useEffect(() => {
     fetchJobs();
     if (user) {
       fetchSavedJobs();
     }
+  }, [user]);
+
+  // Real-time subscription for saved jobs
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('job-list-saved-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'saved_jobs',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          fetchSavedJobs();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   const fetchJobs = async () => {
@@ -119,6 +146,11 @@ export const JobList = () => {
     return <div className="text-center py-12 text-muted-foreground">Loading jobs...</div>;
   }
 
+  const totalPages = Math.ceil(jobs.length / jobsPerPage);
+  const startIndex = (currentPage - 1) * jobsPerPage;
+  const endIndex = startIndex + jobsPerPage;
+  const currentJobs = jobs.slice(startIndex, endIndex);
+
   return (
     <>
       <div className="space-y-8">
@@ -144,7 +176,7 @@ export const JobList = () => {
               <p className="text-muted-foreground">No jobs found. Click "Scrape Jobs" to get started!</p>
             </div>
           ) : (
-            jobs.map((job) => (
+            currentJobs.map((job) => (
               <div
                 key={job.id}
                 className="bg-card border border-border rounded-lg p-6 hover:border-primary transition-all"
@@ -215,9 +247,34 @@ export const JobList = () => {
           )}
         </div>
 
-        {jobs.length > 0 && (
-          <div className="text-center pt-4">
-            <Button variant="outline">Load More Results</Button>
+        {jobs.length > jobsPerPage && (
+          <div className="flex items-center justify-center gap-2 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Prev
+            </Button>
+            
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <Button
+                key={page}
+                variant={currentPage === page ? "default" : "outline"}
+                onClick={() => setCurrentPage(page)}
+                className="w-10"
+              >
+                {page}
+              </Button>
+            ))}
+
+            <Button
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+            </Button>
           </div>
         )}
       </div>

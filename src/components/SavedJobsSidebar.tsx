@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Download, Trash2 } from "lucide-react";
+import { Download, Trash2, CreditCard } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { PricingDialog } from "./PricingDialog";
+import { BillingDialog } from "./BillingDialog";
 
 interface SavedJob {
   id: string;
@@ -24,6 +25,8 @@ export const SavedJobsSidebar = () => {
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
+  const [showBilling, setShowBilling] = useState(false);
+  const [selectAll, setSelectAll] = useState(false);
 
   const fetchSavedJobs = async () => {
     if (!user) return;
@@ -48,6 +51,31 @@ export const SavedJobsSidebar = () => {
     fetchSavedJobs();
   }, [user]);
 
+  // Real-time subscription for saved jobs
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('saved-jobs-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'saved_jobs',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          fetchSavedJobs();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   const handleToggle = (jobId: string) => {
     const newSelected = new Set(selectedJobs);
     if (newSelected.has(jobId)) {
@@ -56,6 +84,45 @@ export const SavedJobsSidebar = () => {
       newSelected.add(jobId);
     }
     setSelectedJobs(newSelected);
+    setSelectAll(newSelected.size === savedJobs.length);
+  };
+
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedJobs(new Set());
+      setSelectAll(false);
+    } else {
+      setSelectedJobs(new Set(savedJobs.map(job => job.id)));
+      setSelectAll(true);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedJobs.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from("saved_jobs")
+        .delete()
+        .in("id", Array.from(selectedJobs));
+
+      if (error) throw error;
+      
+      setSavedJobs(savedJobs.filter(job => !selectedJobs.has(job.id)));
+      setSelectedJobs(new Set());
+      setSelectAll(false);
+      
+      toast({
+        title: "Jobs removed",
+        description: `${selectedJobs.size} job(s) removed from saved list`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to remove jobs",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDelete = async (savedJobId: string) => {
@@ -134,7 +201,7 @@ export const SavedJobsSidebar = () => {
   return (
     <>
       <div className="fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-card border-l border-border p-6 overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Saved Jobs</h2>
           <Button
             size="sm"
@@ -147,6 +214,18 @@ export const SavedJobsSidebar = () => {
           </Button>
         </div>
 
+        {user && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowBilling(true)}
+            className="w-full mb-4"
+          >
+            <CreditCard className="h-4 w-4 mr-2" />
+            Billing
+          </Button>
+        )}
+
         {!user ? (
           <p className="text-sm text-muted-foreground">Sign in to save jobs</p>
         ) : loading ? (
@@ -155,6 +234,27 @@ export const SavedJobsSidebar = () => {
           <p className="text-sm text-muted-foreground">No saved jobs yet</p>
         ) : (
           <div className="space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={selectAll}
+                  onCheckedChange={handleSelectAll}
+                />
+                <span className="text-xs text-muted-foreground">Select all</span>
+              </div>
+              {selectedJobs.size > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleDeleteSelected}
+                  className="h-7 text-xs text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  Delete ({selectedJobs.size})
+                </Button>
+              )}
+            </div>
+
             {savedJobs.map((savedJob) => (
               <div key={savedJob.id} className="bg-secondary/50 rounded-lg p-3 space-y-2">
                 <div className="flex items-start gap-2">
@@ -180,6 +280,7 @@ export const SavedJobsSidebar = () => {
       </div>
 
       <PricingDialog open={showPricing} onOpenChange={setShowPricing} />
+      <BillingDialog open={showBilling} onOpenChange={setShowBilling} />
     </>
   );
 };
