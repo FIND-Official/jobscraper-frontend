@@ -7,16 +7,22 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { PricingDialog } from "./PricingDialog";
 import { BillingDialog } from "./BillingDialog";
+import { format } from "date-fns";
 
 interface SavedJob {
   id: string;
   job_id: string;
+  saved_at: string;
   jobs: {
     title: string;
     company: string;
     location: string;
     apply_url: string;
   };
+}
+
+interface GroupedJobs {
+  [key: string]: SavedJob[];
 }
 
 export const SavedJobsSidebar = () => {
@@ -27,6 +33,7 @@ export const SavedJobsSidebar = () => {
   const [showPricing, setShowPricing] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
+  const [exportCount, setExportCount] = useState(0);
 
   const fetchSavedJobs = async () => {
     if (!user) return;
@@ -35,8 +42,9 @@ export const SavedJobsSidebar = () => {
     try {
       const { data, error } = await supabase
         .from("saved_jobs")
-        .select("id, job_id, jobs(title, company, location, apply_url)")
-        .eq("user_id", user.id);
+        .select("id, job_id, saved_at, jobs(title, company, location, apply_url)")
+        .eq("user_id", user.id)
+        .order("saved_at", { ascending: false });
 
       if (error) throw error;
       setSavedJobs(data || []);
@@ -46,6 +54,11 @@ export const SavedJobsSidebar = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const count = parseInt(localStorage.getItem(`exportCount_${user?.id}`) || "0");
+    setExportCount(count);
+  }, [user]);
 
   useEffect(() => {
     fetchSavedJobs();
@@ -149,6 +162,17 @@ export const SavedJobsSidebar = () => {
   };
 
   const handleExport = async () => {
+    // Check export limits for free tier
+    if (subscriptionTier === "free" && exportCount >= 50) {
+      toast({
+        title: "Export limit reached",
+        description: "Free plan users can export 50 jobs per month. Upgrade to Pro for unlimited exports.",
+        variant: "destructive",
+      });
+      setShowPricing(true);
+      return;
+    }
+
     try {
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
@@ -185,6 +209,13 @@ export const SavedJobsSidebar = () => {
       a.click();
       window.URL.revokeObjectURL(url);
 
+      // Increment export count for free tier
+      if (subscriptionTier === "free") {
+        const newCount = exportCount + savedJobs.length;
+        setExportCount(newCount);
+        localStorage.setItem(`exportCount_${user?.id}`, newCount.toString());
+      }
+
       toast({
         title: "Export successful",
         description: "Your saved jobs have been exported",
@@ -197,6 +228,16 @@ export const SavedJobsSidebar = () => {
       });
     }
   };
+
+  // Group jobs by date
+  const groupedJobs = savedJobs.reduce<GroupedJobs>((acc, job) => {
+    const date = format(new Date(job.saved_at), "dd/MM/yyyy HH:mm");
+    if (!acc[date]) {
+      acc[date] = [];
+    }
+    acc[date].push(job);
+    return acc;
+  }, {});
 
   return (
     <>
@@ -255,24 +296,31 @@ export const SavedJobsSidebar = () => {
               )}
             </div>
 
-            {savedJobs.map((savedJob) => (
-              <div key={savedJob.id} className="bg-secondary/50 rounded-lg p-3 space-y-2">
-                <div className="flex items-start gap-2">
-                  <Checkbox
-                    checked={selectedJobs.has(savedJob.id)}
-                    onCheckedChange={() => handleToggle(savedJob.id)}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium truncate">{savedJob.jobs.title}</h3>
-                    <p className="text-xs text-muted-foreground truncate">{savedJob.jobs.company}</p>
+            {Object.entries(groupedJobs).map(([dateTime, jobs]) => (
+              <div key={dateTime} className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  {dateTime}
+                </p>
+                {jobs.map((savedJob) => (
+                  <div key={savedJob.id} className="bg-secondary/50 rounded-lg p-3 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <Checkbox
+                        checked={selectedJobs.has(savedJob.id)}
+                        onCheckedChange={() => handleToggle(savedJob.id)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-medium truncate">{savedJob.jobs.title}</h3>
+                        <p className="text-xs text-muted-foreground truncate">{savedJob.jobs.company}</p>
+                      </div>
+                      <button
+                        onClick={() => handleDelete(savedJob.id)}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleDelete(savedJob.id)}
-                    className="text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                ))}
               </div>
             ))}
           </div>
