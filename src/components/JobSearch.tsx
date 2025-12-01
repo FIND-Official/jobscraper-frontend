@@ -7,14 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { AuthDialog } from "./AuthDialog";
 
 export const JobSearch = () => {
+  const { user, subscriptionTier } = useAuth();
   const [scraping, setScraping] = useState(false);
   const [selectedBoards, setSelectedBoards] = useState<Set<string>>(
-    new Set(["We Work Remotely", "RemoteOK", "Remote.com"])
+    new Set(["We Work Remotely"])
   );
   const [scrapeCount, setScrapeCount] = useState(0);
-  const [showAuthWarning, setShowAuthWarning] = useState(false);
+  const [showAuthDialog, setShowAuthDialog] = useState(false);
 
   useEffect(() => {
     const count = parseInt(localStorage.getItem("anonymousScrapeCount") || "0");
@@ -32,6 +35,15 @@ export const JobSearch = () => {
     if (newSelected.has(boardName)) {
       newSelected.delete(boardName);
     } else {
+      // Check board limit for free tier
+      if (subscriptionTier === "free" && newSelected.size >= 2) {
+        toast({
+          title: "Board limit reached",
+          description: "Free plan users can select up to 2 boards. Upgrade to Pro for unlimited boards.",
+          variant: "destructive",
+        });
+        return;
+      }
       newSelected.add(boardName);
     }
     setSelectedBoards(newSelected);
@@ -39,9 +51,7 @@ export const JobSearch = () => {
 
   const handleScrape = async () => {
     // Check if user is authenticated
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
+    if (!user) {
       // Anonymous user - check scrape limit
       if (scrapeCount >= 2) {
         toast({
@@ -49,7 +59,7 @@ export const JobSearch = () => {
           description: "You've reached your limit. Sign up to continue scraping jobs!",
           variant: "destructive",
         });
-        setShowAuthWarning(true);
+        setShowAuthDialog(true);
         return;
       }
     }
@@ -70,7 +80,7 @@ export const JobSearch = () => {
       if (error) throw error;
       
       // Increment anonymous scrape count
-      if (!session) {
+      if (!user) {
         const newCount = scrapeCount + 1;
         setScrapeCount(newCount);
         localStorage.setItem("anonymousScrapeCount", newCount.toString());
@@ -177,6 +187,8 @@ export const JobSearch = () => {
           {scraping ? "Scraping..." : "Scrape Jobs"}
         </Button>
       </div>
+
+      <AuthDialog open={showAuthDialog} onOpenChange={setShowAuthDialog} />
     </div>
   );
 };

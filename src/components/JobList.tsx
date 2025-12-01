@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { Bookmark, ExternalLink, MapPin, Briefcase } from "lucide-react";
+import { Bookmark, ExternalLink, MapPin, Briefcase, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthDialog } from "./AuthDialog";
 import { toast } from "@/hooks/use-toast";
+import { differenceInDays } from "date-fns";
 
 interface Job {
   id: string;
@@ -17,6 +19,7 @@ interface Job {
   apply_url: string;
   source: string;
   posted_date: string | null;
+  scraped_at: string;
   tags: string[];
 }
 
@@ -27,6 +30,8 @@ export const JobList = () => {
   const [loading, setLoading] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
   const jobsPerPage = 10;
 
   useEffect(() => {
@@ -142,6 +147,41 @@ export const JobList = () => {
     }
   };
 
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedJobs(new Set());
+      setSelectAll(false);
+    } else {
+      setSelectedJobs(new Set(currentJobs.map(job => job.id)));
+      setSelectAll(true);
+    }
+  };
+
+  const handleToggleJob = (jobId: string) => {
+    const newSelected = new Set(selectedJobs);
+    if (newSelected.has(jobId)) {
+      newSelected.delete(jobId);
+    } else {
+      newSelected.add(jobId);
+    }
+    setSelectedJobs(newSelected);
+    setSelectAll(newSelected.size === currentJobs.length);
+  };
+
+  const handleClearSelected = () => {
+    setSelectedJobs(new Set());
+    setSelectAll(false);
+    toast({
+      title: "Selection cleared",
+      description: `${selectedJobs.size} job(s) deselected`,
+    });
+  };
+
+  const isJobStale = (scrapedAt: string) => {
+    const daysSinceScraped = differenceInDays(new Date(), new Date(scrapedAt));
+    return daysSinceScraped >= 30;
+  };
+
   if (loading) {
     return <div className="text-center py-12 text-muted-foreground">Loading jobs...</div>;
   }
@@ -155,9 +195,33 @@ export const JobList = () => {
     <>
       <div className="space-y-8">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold">
-            Results <span className="text-primary">{jobs.length}</span>
-          </h2>
+          <div className="flex items-center gap-4">
+            <h2 className="text-2xl font-semibold">
+              Results <span className="text-primary">{jobs.length}</span>
+            </h2>
+            {jobs.length > 0 && (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={selectAll}
+                    onCheckedChange={handleSelectAll}
+                  />
+                  <span className="text-xs text-muted-foreground">Select all</span>
+                </div>
+                {selectedJobs.size > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearSelected}
+                    className="h-8 text-xs"
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Clear ({selectedJobs.size})
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
           <Select value="relevance">
             <SelectTrigger className="w-[180px]">
               <SelectValue />
@@ -182,12 +246,23 @@ export const JobList = () => {
                 className="bg-card border border-border rounded-lg p-6 hover:border-primary transition-all"
               >
                 <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Checkbox
+                      checked={selectedJobs.has(job.id)}
+                      onCheckedChange={() => handleToggleJob(job.id)}
+                    />
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <h3 className="text-xl font-semibold">{job.title}</h3>
                       <Badge variant="secondary" className="bg-primary/20 text-primary border-0">
                         {job.source}
                       </Badge>
+                      {isJobStale(job.scraped_at) && (
+                        <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                          Old job
+                        </Badge>
+                      )}
                     </div>
                     
                     <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
