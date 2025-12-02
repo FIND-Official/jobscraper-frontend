@@ -43,6 +43,7 @@ export const JobList = () => {
   const [selectedJob, setSelectedJob] = useState<DeduplicatedJob | null>(null);
   const [showJobDetail, setShowJobDetail] = useState(false);
   const [urlFirstSeen, setUrlFirstSeen] = useState<Map<string, string>>(new Map());
+  const [sortBy, setSortBy] = useState<"relevance" | "date">("relevance");
   const jobsPerPage = 10;
 
   useEffect(() => {
@@ -262,10 +263,22 @@ export const JobList = () => {
     return <div className="text-center py-12 text-muted-foreground">Loading jobs...</div>;
   }
 
-  const totalPages = Math.ceil(jobs.length / jobsPerPage);
+  // Sort jobs based on selected option
+  const sortedJobs = [...jobs].sort((a, b) => {
+    if (sortBy === "date") {
+      return new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime();
+    }
+    // For relevance, prioritize non-stale jobs first, then by date
+    const aStale = isJobStale(a);
+    const bStale = isJobStale(b);
+    if (aStale !== bStale) return aStale ? 1 : -1;
+    return new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime();
+  });
+
+  const totalPages = Math.ceil(sortedJobs.length / jobsPerPage);
   const startIndex = (currentPage - 1) * jobsPerPage;
   const endIndex = startIndex + jobsPerPage;
-  const currentJobs = jobs.slice(startIndex, endIndex);
+  const currentJobs = sortedJobs.slice(startIndex, endIndex);
 
   // Calculate total duplicates merged
   const totalDuplicatesMerged = jobs.reduce((sum, job) => sum + job.duplicateCount, 0);
@@ -306,14 +319,13 @@ export const JobList = () => {
               </div>
             )}
           </div>
-          <Select value="relevance">
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as "relevance" | "date")}>
             <SelectTrigger className="w-[180px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="relevance">Sort by: Relevance</SelectItem>
               <SelectItem value="date">Sort by: Date</SelectItem>
-              <SelectItem value="company">Sort by: Company</SelectItem>
             </SelectContent>
           </Select>
         </div>
