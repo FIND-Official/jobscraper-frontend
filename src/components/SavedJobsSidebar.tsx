@@ -21,6 +21,10 @@ interface SavedJob {
   };
 }
 
+interface ExportedJobsMap {
+  [key: string]: boolean;
+}
+
 interface GroupedJobs {
   [key: string]: SavedJob[];
 }
@@ -34,6 +38,7 @@ export const SavedJobsSidebar = () => {
   const [showBilling, setShowBilling] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
   const [exportCount, setExportCount] = useState(0);
+  const [exportedJobIds, setExportedJobIds] = useState<ExportedJobsMap>({});
 
   const fetchSavedJobs = async () => {
     if (!user) return;
@@ -58,6 +63,12 @@ export const SavedJobsSidebar = () => {
   useEffect(() => {
     const count = parseInt(localStorage.getItem(`exportCount_${user?.id}`) || "0");
     setExportCount(count);
+    // Load exported job IDs
+    const exported = localStorage.getItem(`exportedJobs_${user?.id}`);
+    if (exported) {
+      const ids = JSON.parse(exported) as string[];
+      setExportedJobIds(ids.reduce((acc, id) => ({ ...acc, [id]: true }), {}));
+    }
   }, [user]);
 
   useEffect(() => {
@@ -221,6 +232,7 @@ export const SavedJobsSidebar = () => {
       const existingExported = JSON.parse(localStorage.getItem(`exportedJobs_${user?.id}`) || "[]");
       const updatedExported = [...new Set([...existingExported, ...exportedIds])];
       localStorage.setItem(`exportedJobs_${user?.id}`, JSON.stringify(updatedExported));
+      setExportedJobIds(updatedExported.reduce((acc: ExportedJobsMap, id: string) => ({ ...acc, [id]: true }), {}));
 
       toast({
         title: "Export successful",
@@ -250,15 +262,15 @@ export const SavedJobsSidebar = () => {
       <div className="fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-card border-l border-border p-6 overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Saved Jobs</h2>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleExport}
-            disabled={savedJobs.length === 0}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleExport}
+          disabled={selectedJobs.size === 0}
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Export
+        </Button>
         </div>
 
         {user && (
@@ -315,7 +327,14 @@ export const SavedJobsSidebar = () => {
                         onCheckedChange={() => handleToggle(savedJob.id)}
                       />
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-medium truncate">{savedJob.jobs.title}</h3>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="text-sm font-medium truncate">{savedJob.jobs.title}</h3>
+                          {exportedJobIds[savedJob.job_id] && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full whitespace-nowrap">
+                              Exported
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground truncate">{savedJob.jobs.company}</p>
                       </div>
                       <button
