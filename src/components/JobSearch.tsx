@@ -28,6 +28,7 @@ export const JobSearch = () => {
     { id: "wwr", name: "We Work Remotely" },
     { id: "remoteok", name: "RemoteOK" },
     { id: "remote", name: "Remote.com" },
+    { id: "workingnomads", name: "Working Nomads" },
   ];
 
   const toggleBoard = (boardName: string) => {
@@ -123,7 +124,7 @@ export const JobSearch = () => {
       <div className="space-y-4">
         <div>
           <Label className="text-sm font-medium mb-3 block">Job Boards</Label>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {jobBoards.map((board) => (
               <div
                 key={board.id}

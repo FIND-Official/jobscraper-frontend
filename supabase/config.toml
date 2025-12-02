@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.export-saved-jobs]
 verify_jwt = true
+
+[functions.parse-job-ai]
+verify_jwt = true
