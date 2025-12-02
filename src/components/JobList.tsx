@@ -3,9 +3,11 @@ import { Bookmark, ExternalLink, MapPin, Briefcase, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthDialog } from "./AuthDialog";
+import { JobDetailModal } from "./JobDetailModal";
 import { toast } from "@/hooks/use-toast";
 import { differenceInDays } from "date-fns";
 
@@ -23,21 +25,31 @@ interface Job {
   tags: string[];
 }
 
+interface DeduplicatedJob extends Job {
+  duplicateCount: number;
+  duplicateSources: string[];
+}
+
 export const JobList = () => {
   const { user } = useAuth();
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<DeduplicatedJob[]>([]);
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set());
+  const [exportedJobIds, setExportedJobIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<DeduplicatedJob | null>(null);
+  const [showJobDetail, setShowJobDetail] = useState(false);
+  const [urlFirstSeen, setUrlFirstSeen] = useState<Map<string, string>>(new Map());
   const jobsPerPage = 10;
 
   useEffect(() => {
     fetchJobs();
     if (user) {
       fetchSavedJobs();
+      loadExportedJobs();
     }
   }, [user]);
 
@@ -66,6 +78,59 @@ export const JobList = () => {
     };
   }, [user]);
 
+  const loadExportedJobs = () => {
+    if (!user) return;
+    const exported = localStorage.getItem(`exportedJobs_${user.id}`);
+    if (exported) {
+      setExportedJobIds(new Set(JSON.parse(exported)));
+    }
+  };
+
+  const deduplicateJobs = (rawJobs: Job[]): DeduplicatedJob[] => {
+    const urlMap = new Map<string, Job[]>();
+    const firstSeenMap = new Map<string, string>();
+    
+    // Group jobs by apply_url
+    rawJobs.forEach((job) => {
+      const url = job.apply_url.toLowerCase().trim();
+      if (!urlMap.has(url)) {
+        urlMap.set(url, []);
+        firstSeenMap.set(url, job.scraped_at);
+      } else {
+        // Track first seen date
+        const existingDate = new Date(firstSeenMap.get(url)!);
+        const newDate = new Date(job.scraped_at);
+        if (newDate < existingDate) {
+          firstSeenMap.set(url, job.scraped_at);
+        }
+      }
+      urlMap.get(url)!.push(job);
+    });
+
+    setUrlFirstSeen(firstSeenMap);
+
+    // Merge duplicates
+    const deduplicated: DeduplicatedJob[] = [];
+    urlMap.forEach((duplicates) => {
+      // Use the most recent job as primary
+      const sortedDuplicates = duplicates.sort(
+        (a, b) => new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime()
+      );
+      const primaryJob = sortedDuplicates[0];
+      const sources = [...new Set(duplicates.map((d) => d.source))];
+      
+      deduplicated.push({
+        ...primaryJob,
+        duplicateCount: duplicates.length - 1,
+        duplicateSources: sources,
+      });
+    });
+
+    return deduplicated.sort(
+      (a, b) => new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime()
+    );
+  };
+
   const fetchJobs = async () => {
     setLoading(true);
     try {
@@ -73,10 +138,11 @@ export const JobList = () => {
         .from("jobs")
         .select("*")
         .order("scraped_at", { ascending: false })
-        .limit(100);
+        .limit(500);
 
       if (error) throw error;
-      setJobs(data || []);
+      const deduplicated = deduplicateJobs(data || []);
+      setJobs(deduplicated);
     } catch (error) {
       console.error("Error fetching jobs:", error);
     } finally {
@@ -169,17 +235,27 @@ export const JobList = () => {
   };
 
   const handleClearSelected = () => {
+    const count = selectedJobs.size;
     setSelectedJobs(new Set());
     setSelectAll(false);
     toast({
       title: "Selection cleared",
-      description: `${selectedJobs.size} job(s) deselected`,
+      description: `${count} job(s) deselected`,
     });
   };
 
-  const isJobStale = (scrapedAt: string) => {
-    const daysSinceScraped = differenceInDays(new Date(), new Date(scrapedAt));
-    return daysSinceScraped >= 30;
+  const isJobStale = (job: DeduplicatedJob) => {
+    const url = job.apply_url.toLowerCase().trim();
+    const firstSeen = urlFirstSeen.get(url);
+    if (!firstSeen) return false;
+    
+    const daysSinceFirstSeen = differenceInDays(new Date(), new Date(firstSeen));
+    return daysSinceFirstSeen >= 30;
+  };
+
+  const handleJobClick = (job: DeduplicatedJob) => {
+    setSelectedJob(job);
+    setShowJobDetail(true);
   };
 
   if (loading) {
@@ -191,14 +267,22 @@ export const JobList = () => {
   const endIndex = startIndex + jobsPerPage;
   const currentJobs = jobs.slice(startIndex, endIndex);
 
+  // Calculate total duplicates merged
+  const totalDuplicatesMerged = jobs.reduce((sum, job) => sum + job.duplicateCount, 0);
+
   return (
     <>
       <div className="space-y-8">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <h2 className="text-2xl font-semibold">
               Results <span className="text-primary">{jobs.length}</span>
             </h2>
+            {totalDuplicatesMerged > 0 && (
+              <Badge variant="outline" className="text-blue-600 border-blue-600">
+                {totalDuplicatesMerged} duplicates merged
+              </Badge>
+            )}
             {jobs.length > 0 && (
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
@@ -213,7 +297,7 @@ export const JobList = () => {
                     variant="ghost"
                     size="sm"
                     onClick={handleClearSelected}
-                    className="h-8 text-xs"
+                    className="h-8 text-xs text-destructive hover:text-destructive"
                   >
                     <X className="h-3 w-3 mr-1" />
                     Clear ({selectedJobs.size})
@@ -240,85 +324,106 @@ export const JobList = () => {
               <p className="text-muted-foreground">No jobs found. Click "Scrape Jobs" to get started!</p>
             </div>
           ) : (
-            currentJobs.map((job) => (
-              <div
-                key={job.id}
-                className="bg-card border border-border rounded-lg p-6 hover:border-primary transition-all"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <Checkbox
-                      checked={selectedJobs.has(job.id)}
-                      onCheckedChange={() => handleToggleJob(job.id)}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <h3 className="text-xl font-semibold">{job.title}</h3>
-                      <Badge variant="secondary" className="bg-primary/20 text-primary border-0">
-                        {job.source}
-                      </Badge>
-                      {isJobStale(job.scraped_at) && (
-                        <Badge variant="outline" className="text-yellow-600 border-yellow-600">
-                          Old job
+            currentJobs.map((job) => {
+              const stale = isJobStale(job);
+              const exported = exportedJobIds.has(job.id);
+              
+              return (
+                <div
+                  key={job.id}
+                  className="bg-card border border-border rounded-lg p-6 hover:border-primary transition-all cursor-pointer"
+                  onClick={() => handleJobClick(job)}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div 
+                      className="flex items-center gap-2 flex-shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Checkbox
+                        checked={selectedJobs.has(job.id)}
+                        onCheckedChange={() => handleToggleJob(job.id)}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <h3 className="text-xl font-semibold">{job.title}</h3>
+                        <Badge variant="secondary" className="bg-primary/20 text-primary border-0">
+                          {job.source}
                         </Badge>
+                        {job.duplicateCount > 0 && (
+                          <Badge variant="outline" className="text-blue-600 border-blue-600">
+                            {job.duplicateCount} duplicate{job.duplicateCount > 1 ? 's' : ''} merged
+                          </Badge>
+                        )}
+                        {exported && (
+                          <Badge variant="outline" className="text-green-600 border-green-600 bg-green-50">
+                            Exported
+                          </Badge>
+                        )}
+                        {stale && (
+                          <Badge variant="outline" className="text-yellow-600 border-yellow-600 bg-yellow-50">
+                            Potentially old job
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
+                        <span className="font-medium text-foreground">{job.company}</span>
+                        <span className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {job.location || "Remote"}
+                        </span>
+                        {job.job_type && (
+                          <span className="flex items-center gap-1">
+                            <Briefcase className="h-3 w-3" />
+                            {job.job_type}
+                          </span>
+                        )}
+                      </div>
+
+                      {job.description && (
+                        <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+                          {job.description.replace(/<[^>]*>/g, "").substring(0, 200)}...
+                        </p>
+                      )}
+
+                      {job.tags && job.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {job.tags.slice(0, 3).map((tag, index) => (
+                            <Badge key={index} variant="outline" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-                      <span className="font-medium text-foreground">{job.company}</span>
-                      <span className="flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
-                        {job.location}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Briefcase className="h-3 w-3" />
-                        {job.job_type}
-                      </span>
+
+                    <div className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleSave(job.id)}
+                        className={savedJobIds.has(job.id) ? "text-primary" : ""}
+                      >
+                        <Bookmark
+                          className="h-5 w-5"
+                          fill={savedJobIds.has(job.id) ? "currentColor" : "none"}
+                        />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        asChild
+                      >
+                        <a href={job.apply_url} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-5 w-5" />
+                        </a>
+                      </Button>
                     </div>
-
-                    {job.description && (
-                      <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-                        {job.description.replace(/<[^>]*>/g, "").substring(0, 200)}...
-                      </p>
-                    )}
-
-                    {job.tags && job.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {job.tags.slice(0, 3).map((tag, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleSave(job.id)}
-                      className={savedJobIds.has(job.id) ? "text-primary" : ""}
-                    >
-                      <Bookmark
-                        className="h-5 w-5"
-                        fill={savedJobIds.has(job.id) ? "currentColor" : "none"}
-                      />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      asChild
-                    >
-                      <a href={job.apply_url} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-5 w-5" />
-                      </a>
-                    </Button>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -332,16 +437,28 @@ export const JobList = () => {
               Prev
             </Button>
             
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-              <Button
-                key={page}
-                variant={currentPage === page ? "default" : "outline"}
-                onClick={() => setCurrentPage(page)}
-                className="w-10"
-              >
-                {page}
-              </Button>
-            ))}
+            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+              let page;
+              if (totalPages <= 5) {
+                page = i + 1;
+              } else if (currentPage <= 3) {
+                page = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                page = totalPages - 4 + i;
+              } else {
+                page = currentPage - 2 + i;
+              }
+              return (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? "default" : "outline"}
+                  onClick={() => setCurrentPage(page)}
+                  className="w-10"
+                >
+                  {page}
+                </Button>
+              );
+            })}
 
             <Button
               variant="outline"
@@ -355,8 +472,14 @@ export const JobList = () => {
       </div>
 
       <AuthDialog open={showAuth} onOpenChange={setShowAuth} />
+      <JobDetailModal
+        job={selectedJob}
+        open={showJobDetail}
+        onOpenChange={setShowJobDetail}
+        isExported={selectedJob ? exportedJobIds.has(selectedJob.id) : false}
+        isStale={selectedJob ? isJobStale(selectedJob) : false}
+        duplicateCount={selectedJob?.duplicateCount}
+      />
     </>
   );
 };
-
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";

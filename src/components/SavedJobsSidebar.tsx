@@ -216,6 +216,12 @@ export const SavedJobsSidebar = () => {
         localStorage.setItem(`exportCount_${user?.id}`, newCount.toString());
       }
 
+      // Mark jobs as exported
+      const exportedIds = savedJobs.map(job => job.job_id);
+      const existingExported = JSON.parse(localStorage.getItem(`exportedJobs_${user?.id}`) || "[]");
+      const updatedExported = [...new Set([...existingExported, ...exportedIds])];
+      localStorage.setItem(`exportedJobs_${user?.id}`, JSON.stringify(updatedExported));
+
       toast({
         title: "Export successful",
         description: "Your saved jobs have been exported",
