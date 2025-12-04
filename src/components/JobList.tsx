@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bookmark, ExternalLink, MapPin, Briefcase, X } from "lucide-react";
+import { Bookmark, ExternalLink, MapPin, Briefcase, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { AuthDialog } from "./AuthDialog";
 import { JobDetailModal } from "./JobDetailModal";
 import { toast } from "@/hooks/use-toast";
-import { differenceInDays } from "date-fns";
+import { differenceInDays, format } from "date-fns";
 
 interface Job {
   id: string;
@@ -30,7 +30,21 @@ interface DeduplicatedJob extends Job {
   duplicateSources: string[];
 }
 
-export const JobList = () => {
+interface ScrapeSession {
+  id: string;
+  timestamp: string;
+  searchQuery: string;
+  boards: string[];
+  jobCount: number;
+}
+
+interface JobListProps {
+  scrapeSessions?: ScrapeSession[];
+  onClearSessions?: () => void;
+  refreshTrigger?: number;
+}
+
+export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }: JobListProps) => {
   const { user } = useAuth();
   const [jobs, setJobs] = useState<DeduplicatedJob[]>([]);
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set());
@@ -53,6 +67,13 @@ export const JobList = () => {
       loadExportedJobs();
     }
   }, [user]);
+
+  // Refresh jobs when scrape completes
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      fetchJobs();
+    }
+  }, [refreshTrigger]);
 
   // Real-time subscription for saved jobs
   useEffect(() => {
@@ -91,14 +112,12 @@ export const JobList = () => {
     const urlMap = new Map<string, Job[]>();
     const firstSeenMap = new Map<string, string>();
     
-    // Group jobs by apply_url
     rawJobs.forEach((job) => {
       const url = job.apply_url.toLowerCase().trim();
       if (!urlMap.has(url)) {
         urlMap.set(url, []);
         firstSeenMap.set(url, job.scraped_at);
       } else {
-        // Track first seen date
         const existingDate = new Date(firstSeenMap.get(url)!);
         const newDate = new Date(job.scraped_at);
         if (newDate < existingDate) {
@@ -110,10 +129,8 @@ export const JobList = () => {
 
     setUrlFirstSeen(firstSeenMap);
 
-    // Merge duplicates
     const deduplicated: DeduplicatedJob[] = [];
     urlMap.forEach((duplicates) => {
-      // Use the most recent job as primary
       const sortedDuplicates = duplicates.sort(
         (a, b) => new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime()
       );
@@ -268,7 +285,6 @@ export const JobList = () => {
     if (sortBy === "date") {
       return new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime();
     }
-    // For relevance, prioritize non-stale jobs first, then by date
     const aStale = isJobStale(a);
     const bStale = isJobStale(b);
     if (aStale !== bStale) return aStale ? 1 : -1;
@@ -280,12 +296,40 @@ export const JobList = () => {
   const endIndex = startIndex + jobsPerPage;
   const currentJobs = sortedJobs.slice(startIndex, endIndex);
 
-  // Calculate total duplicates merged
   const totalDuplicatesMerged = jobs.reduce((sum, job) => sum + job.duplicateCount, 0);
 
   return (
     <>
       <div className="space-y-8">
+        {/* Scrape Sessions History */}
+        {scrapeSessions.length > 0 && (
+          <div className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium text-sm">Recent Scrapes</h3>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={onClearSessions}
+                className="text-xs text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Clear History
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {scrapeSessions.map((session) => (
+                <Badge 
+                  key={session.id} 
+                  variant="secondary" 
+                  className="text-xs py-1 px-2"
+                >
+                  "{session.searchQuery}" - {session.boards.join(', ')} ({session.jobCount} jobs) • {format(new Date(session.timestamp), 'HH:mm')}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4 flex-wrap">
             <h2 className="text-2xl font-semibold">
