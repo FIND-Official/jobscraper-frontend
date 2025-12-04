@@ -10,7 +10,19 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthDialog } from "./AuthDialog";
 
-export const JobSearch = () => {
+interface ScrapeResult {
+  id: string;
+  timestamp: string;
+  searchQuery: string;
+  boards: string[];
+  jobCount: number;
+}
+
+interface JobSearchProps {
+  onScrapeComplete?: (result: ScrapeResult) => void;
+}
+
+export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
   const { user, subscriptionTier } = useAuth();
   const [scraping, setScraping] = useState(false);
   const [selectedBoards, setSelectedBoards] = useState<Set<string>>(
@@ -18,6 +30,9 @@ export const JobSearch = () => {
   );
   const [scrapeCount, setScrapeCount] = useState(0);
   const [showAuthDialog, setShowAuthDialog] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [experienceLevel, setExperienceLevel] = useState("any");
+  const [benefits, setBenefits] = useState("any");
 
   useEffect(() => {
     const count = parseInt(localStorage.getItem("anonymousScrapeCount") || "0");
@@ -36,7 +51,6 @@ export const JobSearch = () => {
     if (newSelected.has(boardName)) {
       newSelected.delete(boardName);
     } else {
-      // Check board limit for free tier
       if (subscriptionTier === "free" && newSelected.size >= 2) {
         toast({
           title: "Board limit reached",
@@ -51,9 +65,7 @@ export const JobSearch = () => {
   };
 
   const handleScrape = async () => {
-    // Check if user is authenticated
     if (!user) {
-      // Anonymous user - check scrape limit
       if (scrapeCount >= 2) {
         toast({
           title: "Sign up required",
@@ -76,24 +88,40 @@ export const JobSearch = () => {
 
     setScraping(true);
     try {
-      const { data, error } = await supabase.functions.invoke("scrape-jobs");
+      const boardsArray = Array.from(selectedBoards);
+      
+      const { data, error } = await supabase.functions.invoke("scrape-jobs", {
+        body: { 
+          boards: boardsArray,
+          searchQuery: searchQuery.trim() || undefined,
+          experienceLevel: experienceLevel !== "any" ? experienceLevel : undefined,
+          benefits: benefits !== "any" ? benefits : undefined,
+        }
+      });
       
       if (error) throw error;
       
-      // Increment anonymous scrape count
       if (!user) {
         const newCount = scrapeCount + 1;
         setScrapeCount(newCount);
         localStorage.setItem("anonymousScrapeCount", newCount.toString());
       }
       
+      const scrapeResult: ScrapeResult = {
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        searchQuery: searchQuery.trim() || "All Jobs",
+        boards: boardsArray,
+        jobCount: data?.count || 0,
+      };
+      
       toast({
         title: "Jobs scraped!",
-        description: `Found ${data?.count || 0} remote jobs`,
+        description: `Found ${data?.count || 0} remote jobs from ${boardsArray.length} board(s)`,
       });
       
-      // Reload the page to show new jobs
-      window.location.reload();
+      onScrapeComplete?.(scrapeResult);
+      
     } catch (error: any) {
       toast({
         title: "Error",
@@ -112,9 +140,9 @@ export const JobSearch = () => {
           Find Remote Jobs
         </h1>
         <p className="text-muted-foreground">
-          Select job boards, use filters and scrape the latest remote opportunities at in one place.
+          Select job boards, use filters and scrape the latest remote opportunities in one place.
         </p>
-        {scrapeCount > 0 && scrapeCount < 2 && (
+        {!user && scrapeCount > 0 && scrapeCount < 2 && (
           <p className="text-xs text-muted-foreground mt-2">
             Anonymous scrapes remaining: {2 - scrapeCount}
           </p>
@@ -135,7 +163,7 @@ export const JobSearch = () => {
                   checked={selectedBoards.has(board.name)}
                   onCheckedChange={() => toggleBoard(board.name)}
                 />
-                <Label htmlFor={board.id} className="cursor-pointer flex-1">
+                <Label htmlFor={board.id} className="cursor-pointer flex-1 text-sm">
                   {board.name}
                 </Label>
               </div>
@@ -146,11 +174,16 @@ export const JobSearch = () => {
         <div className="grid md:grid-cols-3 gap-4">
           <div>
             <Label className="text-sm mb-2 block">Search</Label>
-            <Input placeholder="e.g., designer, developer..." className="bg-card" />
+            <Input 
+              placeholder="e.g., designer, developer..." 
+              className="bg-card"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
           <div>
             <Label className="text-sm mb-2 block">Experience Level</Label>
-            <Select>
+            <Select value={experienceLevel} onValueChange={setExperienceLevel}>
               <SelectTrigger className="bg-card">
                 <SelectValue placeholder="Any Level" />
               </SelectTrigger>
@@ -164,7 +197,7 @@ export const JobSearch = () => {
           </div>
           <div>
             <Label className="text-sm mb-2 block">Benefits</Label>
-            <Select>
+            <Select value={benefits} onValueChange={setBenefits}>
               <SelectTrigger className="bg-card">
                 <SelectValue placeholder="Any Benefits" />
               </SelectTrigger>

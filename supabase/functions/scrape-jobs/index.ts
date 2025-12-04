@@ -15,18 +15,24 @@ interface Job {
   source: string;
   posted_date: string | null;
   tags: string[] | null;
+  job_type?: string | null;
+}
+
+interface ScrapeRequest {
+  boards?: string[];
+  searchQuery?: string;
+  experienceLevel?: string;
+  benefits?: string;
 }
 
 // Sanitize text content to prevent XSS and injection attacks
 const sanitizeText = (text: string | null | undefined, maxLength: number = 5000): string | null => {
   if (!text) return null;
   
-  // Remove HTML tags and scripts
   let sanitized = String(text)
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/<[^>]*>/g, '');
   
-  // Remove dangerous characters and normalize whitespace
   sanitized = sanitized
     .replace(/[<>]/g, '')
     .replace(/&lt;/g, '')
@@ -35,7 +41,6 @@ const sanitizeText = (text: string | null | undefined, maxLength: number = 5000)
     .replace(/on\w+=/gi, '')
     .trim();
   
-  // Limit length
   return sanitized.substring(0, maxLength);
 };
 
@@ -43,7 +48,6 @@ const sanitizeUrl = (url: string | null | undefined): string => {
   if (!url) return '';
   try {
     const parsedUrl = new URL(String(url));
-    // Only allow http and https protocols
     if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
       return '';
     }
@@ -54,64 +58,58 @@ const sanitizeUrl = (url: string | null | undefined): string => {
 };
 
 async function scrapeWeWorkRemotely(): Promise<Job[]> {
-  console.log("[SCRAPER] Fetching We Work Remotely HTML...");
+  console.log("[SCRAPER] Fetching We Work Remotely...");
   try {
-    const response = await fetch("https://weworkremotely.com/", {
+    const response = await fetch("https://weworkremotely.com/remote-jobs.rss", {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; JobScraper/1.0)'
       }
     });
-    const html = await response.text();
+    const xml = await response.text();
     
     const jobs: Job[] = [];
     
-    // Parse job listings using regex to match the HTML structure
-    // Looking for: <li class="...new-listing-container...">
-    const listingRegex = /<li[^>]*class="[^"]*new-listing-container[^"]*"[^>]*>([\s\S]*?)<\/li>/g;
+    // Parse RSS feed
+    const itemRegex = /<item>([\s\S]*?)<\/item>/g;
     let match;
     
-    while ((match = listingRegex.exec(html)) !== null) {
-      const listingHtml = match[1];
+    while ((match = itemRegex.exec(xml)) !== null && jobs.length < 50) {
+      const itemXml = match[1];
       
-      // Extract job title from: <h4 class="new-listing__header__title">
-      const titleMatch = /<h4[^>]*class="[^"]*new-listing__header__title[^"]*"[^>]*>([\s\S]*?)<\/h4>/.exec(listingHtml);
+      const titleMatch = /<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/i.exec(itemXml);
+      const linkMatch = /<link>(.*?)<\/link>/i.exec(itemXml);
+      const descMatch = /<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>|<description>([\s\S]*?)<\/description>/i.exec(itemXml);
+      const pubDateMatch = /<pubDate>(.*?)<\/pubDate>/i.exec(itemXml);
       
-      // Extract job link from: <a href="/remote-jobs/...">
-      const linkMatch = /<a[^>]*href="(\/remote-jobs\/[^"]+)"/.exec(listingHtml);
+      const rawTitle = titleMatch?.[1] || titleMatch?.[2] || '';
+      const link = linkMatch?.[1] || '';
+      const description = descMatch?.[1] || descMatch?.[2] || '';
+      const pubDate = pubDateMatch?.[1] || '';
       
-      // Extract company from: <span class="new-listing__header__company">
-      const companyMatch = /<span[^>]*class="[^"]*new-listing__header__company[^"]*"[^>]*>([\s\S]*?)<\/span>/.exec(listingHtml);
+      // Parse title format: "Company: Job Title"
+      const titleParts = rawTitle.split(':');
+      const company = titleParts.length > 1 ? titleParts[0].trim() : 'Unknown Company';
+      const title = titleParts.length > 1 ? titleParts.slice(1).join(':').trim() : rawTitle.trim();
       
-      // Extract region/category
-      const regionMatch = /<span[^>]*class="[^"]*new-listing__region[^"]*"[^>]*>([\s\S]*?)<\/span>/.exec(listingHtml);
-      
-      if (titleMatch && linkMatch) {
-        // Clean HTML tags from title
-        const rawTitle = titleMatch[1].replace(/<[^>]*>/g, '').trim();
-        const rawCompany = companyMatch?.[1]?.replace(/<[^>]*>/g, '').trim() || "Unknown Company";
-        const rawRegion = regionMatch?.[1]?.replace(/<[^>]*>/g, '').trim();
-        
-        const title = sanitizeText(rawTitle, 200) || "Untitled";
-        const company = sanitizeText(rawCompany, 200) || "Unknown Company";
-        const url = sanitizeUrl(`https://weworkremotely.com${linkMatch[1]}`);
-        
-        if (url && title !== "Untitled") {
+      if (title && link) {
+        const url = sanitizeUrl(link);
+        if (url) {
           jobs.push({
-            title,
-            company,
+            title: sanitizeText(title, 200) || "Untitled",
+            company: sanitizeText(company, 200) || "Unknown Company",
             location: "Remote",
-            description: sanitizeText(rawRegion),
+            description: sanitizeText(description),
             apply_url: url,
             source: "We Work Remotely",
-            posted_date: new Date().toISOString(),
-            tags: rawRegion ? [sanitizeText(rawRegion, 50) || "Remote"] : ["Remote"],
+            posted_date: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+            tags: ["Remote"],
           });
         }
       }
     }
     
     console.log(`[SCRAPER] We Work Remotely: Found ${jobs.length} jobs`);
-    return jobs.slice(0, 50);
+    return jobs;
   } catch (error) {
     console.error("[SCRAPER] We Work Remotely error:", error);
     return [];
@@ -132,7 +130,7 @@ async function scrapeRemoteOK(): Promise<Job[]> {
     
     for (const item of data.slice(1, 51)) {
       if (item.position && item.company) {
-        const url = sanitizeUrl(item.apply_url || `https://remoteok.com/remote-jobs/${item.id}`);
+        const url = sanitizeUrl(item.apply_url || item.url || `https://remoteok.com/remote-jobs/${item.id}`);
         if (url) {
           const tags = Array.isArray(item.tags) 
             ? item.tags.slice(0, 10).map((tag: any) => sanitizeText(String(tag), 50)).filter(Boolean)
@@ -145,8 +143,8 @@ async function scrapeRemoteOK(): Promise<Job[]> {
             description: sanitizeText(item.description),
             apply_url: url,
             source: "RemoteOK",
-            posted_date: item.date ? new Date(Number(item.date) * 1000).toISOString() : null,
-            tags: tags && tags.length > 0 ? tags : null,
+            posted_date: item.date ? new Date(Number(item.date) * 1000).toISOString() : new Date().toISOString(),
+            tags: tags && tags.length > 0 ? tags : ["Remote"],
           });
         }
       }
@@ -160,9 +158,82 @@ async function scrapeRemoteOK(): Promise<Job[]> {
   }
 }
 
+async function scrapeWorkingNomads(): Promise<Job[]> {
+  console.log("[SCRAPER] Fetching Working Nomads...");
+  try {
+    const response = await fetch("https://www.workingnomads.com/api/exposed_jobs/", {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; JobScraper/1.0)'
+      }
+    });
+    const data = await response.json();
+    
+    const jobs: Job[] = [];
+    
+    for (const item of data.slice(0, 50)) {
+      if (item.title && item.company_name) {
+        const url = sanitizeUrl(item.url);
+        if (url) {
+          jobs.push({
+            title: sanitizeText(item.title, 200) || "Untitled",
+            company: sanitizeText(item.company_name, 200) || "Unknown",
+            location: sanitizeText(item.location, 100) || "Remote",
+            description: sanitizeText(item.description),
+            apply_url: url,
+            source: "Working Nomads",
+            posted_date: item.pub_date ? new Date(item.pub_date).toISOString() : new Date().toISOString(),
+            tags: item.category_name ? [sanitizeText(item.category_name, 50) || "Remote"] : ["Remote"],
+            job_type: sanitizeText(item.job_type, 50),
+          });
+        }
+      }
+    }
+    
+    console.log(`[SCRAPER] Working Nomads: Found ${jobs.length} jobs`);
+    return jobs;
+  } catch (error) {
+    console.error("[SCRAPER] Working Nomads error:", error);
+    return [];
+  }
+}
+
 async function scrapeRemoteCom(): Promise<Job[]> {
-  console.log("[SCRAPER] Remote.com API not publicly available");
+  console.log("[SCRAPER] Remote.com - using placeholder (API not publicly available)");
+  // Remote.com doesn't have a public API, return empty
   return [];
+}
+
+// Filter jobs based on search criteria
+function filterJobs(jobs: Job[], searchQuery?: string, experienceLevel?: string): Job[] {
+  let filtered = jobs;
+  
+  if (searchQuery && searchQuery.trim()) {
+    const query = searchQuery.toLowerCase();
+    filtered = filtered.filter(job => 
+      job.title.toLowerCase().includes(query) ||
+      job.company.toLowerCase().includes(query) ||
+      job.description?.toLowerCase().includes(query) ||
+      job.tags?.some(tag => tag.toLowerCase().includes(query))
+    );
+  }
+  
+  if (experienceLevel && experienceLevel !== 'any') {
+    const levelKeywords: Record<string, string[]> = {
+      'entry': ['entry', 'junior', 'jr', 'associate', 'intern', 'graduate'],
+      'mid': ['mid', 'intermediate', '2-5 years', '3+ years'],
+      'senior': ['senior', 'sr', 'lead', 'principal', 'staff', '5+ years', 'architect']
+    };
+    
+    const keywords = levelKeywords[experienceLevel] || [];
+    if (keywords.length > 0) {
+      filtered = filtered.filter(job => {
+        const text = `${job.title} ${job.description || ''}`.toLowerCase();
+        return keywords.some(kw => text.includes(kw));
+      });
+    }
+  }
+  
+  return filtered;
 }
 
 serve(async (req) => {
@@ -171,126 +242,64 @@ serve(async (req) => {
   }
 
   try {
-    console.log("[SCRAPER] Generating dummy job data...");
+    // Parse request body
+    let requestData: ScrapeRequest = {};
+    try {
+      requestData = await req.json();
+    } catch {
+      // Default to all boards if no body provided
+      requestData = { boards: ["We Work Remotely", "RemoteOK"] };
+    }
+    
+    const { boards = ["We Work Remotely"], searchQuery, experienceLevel } = requestData;
+    
+    console.log(`[SCRAPER] Starting scrape for boards: ${boards.join(', ')}`);
+    console.log(`[SCRAPER] Search query: ${searchQuery || 'none'}`);
+    console.log(`[SCRAPER] Experience level: ${experienceLevel || 'any'}`);
     
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Generate dummy job data for testing
-    const dummyJobs: Job[] = [
-      {
-        title: "Senior Frontend Developer",
-        company: "TechCorp Global",
-        location: "Remote (US)",
-        description: "We are looking for an experienced Frontend Developer to join our remote team. You will work on building scalable web applications using React, TypeScript, and modern web technologies.",
-        apply_url: "https://example.com/jobs/senior-frontend",
-        source: "We Work Remotely",
-        posted_date: new Date().toISOString(),
-        tags: ["React", "TypeScript", "Remote"]
-      },
-      {
-        title: "Full Stack Engineer",
-        company: "StartupHub Inc",
-        location: "Remote (Europe)",
-        description: "Join our innovative team to build cutting-edge SaaS products. Experience with Node.js, React, and PostgreSQL required.",
-        apply_url: "https://example.com/jobs/fullstack-engineer",
-        source: "RemoteOK",
-        posted_date: new Date().toISOString(),
-        tags: ["Node.js", "React", "PostgreSQL", "Remote"]
-      },
-      {
-        title: "Backend Developer",
-        company: "CloudSolutions Ltd",
-        location: "Remote (Worldwide)",
-        description: "We need a talented Backend Developer to design and implement scalable APIs and microservices using Python and FastAPI.",
-        apply_url: "https://example.com/jobs/backend-dev",
-        source: "We Work Remotely",
-        posted_date: new Date().toISOString(),
-        tags: ["Python", "FastAPI", "APIs", "Remote"]
-      },
-      {
-        title: "DevOps Engineer",
-        company: "DataFlow Systems",
-        location: "Remote (US/Canada)",
-        description: "Looking for a DevOps Engineer with experience in AWS, Docker, Kubernetes, and CI/CD pipelines to help scale our infrastructure.",
-        apply_url: "https://example.com/jobs/devops-engineer",
-        source: "RemoteOK",
-        posted_date: new Date().toISOString(),
-        tags: ["AWS", "Docker", "Kubernetes", "Remote"]
-      },
-      {
-        title: "UI/UX Designer",
-        company: "DesignFirst Studio",
-        location: "Remote (UK)",
-        description: "Creative UI/UX Designer needed to craft beautiful and intuitive user experiences for our mobile and web applications.",
-        apply_url: "https://example.com/jobs/ui-ux-designer",
-        source: "We Work Remotely",
-        posted_date: new Date().toISOString(),
-        tags: ["UI Design", "UX Design", "Figma", "Remote"]
-      },
-      {
-        title: "Data Scientist",
-        company: "AI Innovations",
-        location: "Remote (Worldwide)",
-        description: "Join our AI team to build machine learning models and analyze large datasets. Experience with Python, TensorFlow, and SQL required.",
-        apply_url: "https://example.com/jobs/data-scientist",
-        source: "RemoteOK",
-        posted_date: new Date().toISOString(),
-        tags: ["Python", "Machine Learning", "TensorFlow", "Remote"]
-      },
-      {
-        title: "Mobile Developer (React Native)",
-        company: "AppMasters",
-        location: "Remote (US)",
-        description: "We are seeking a Mobile Developer with React Native experience to build cross-platform mobile applications for iOS and Android.",
-        apply_url: "https://example.com/jobs/mobile-developer",
-        source: "We Work Remotely",
-        posted_date: new Date().toISOString(),
-        tags: ["React Native", "Mobile", "iOS", "Android", "Remote"]
-      },
-      {
-        title: "Product Manager",
-        company: "ProductCo",
-        location: "Remote (Europe/US)",
-        description: "Experienced Product Manager needed to lead product strategy and roadmap for our B2B SaaS platform. Strong technical background preferred.",
-        apply_url: "https://example.com/jobs/product-manager",
-        source: "RemoteOK",
-        posted_date: new Date().toISOString(),
-        tags: ["Product Management", "SaaS", "Strategy", "Remote"]
-      },
-      {
-        title: "QA Engineer",
-        company: "QualityFirst Tech",
-        location: "Remote (Canada)",
-        description: "Quality Assurance Engineer to develop and execute test plans, write automated tests, and ensure product quality across our platforms.",
-        apply_url: "https://example.com/jobs/qa-engineer",
-        source: "We Work Remotely",
-        posted_date: new Date().toISOString(),
-        tags: ["QA", "Testing", "Automation", "Remote"]
-      },
-      {
-        title: "Marketing Manager",
-        company: "GrowthHub",
-        location: "Remote (Worldwide)",
-        description: "Digital Marketing Manager to drive our marketing strategy, SEO, content marketing, and social media campaigns for rapid growth.",
-        apply_url: "https://example.com/jobs/marketing-manager",
-        source: "RemoteOK",
-        posted_date: new Date().toISOString(),
-        tags: ["Marketing", "SEO", "Content", "Remote"]
+    // Scrape selected boards in parallel
+    const scrapePromises: Promise<Job[]>[] = [];
+    
+    for (const board of boards) {
+      switch (board) {
+        case "We Work Remotely":
+          scrapePromises.push(scrapeWeWorkRemotely());
+          break;
+        case "RemoteOK":
+          scrapePromises.push(scrapeRemoteOK());
+          break;
+        case "Working Nomads":
+          scrapePromises.push(scrapeWorkingNomads());
+          break;
+        case "Remote.com":
+          scrapePromises.push(scrapeRemoteCom());
+          break;
+        default:
+          console.log(`[SCRAPER] Unknown board: ${board}`);
       }
-    ];
-
-    const allJobs = dummyJobs;
-    console.log(`[SCRAPER] Total dummy jobs generated: ${allJobs.length}`);
+    }
+    
+    const results = await Promise.all(scrapePromises);
+    let allJobs = results.flat();
+    
+    console.log(`[SCRAPER] Total jobs scraped: ${allJobs.length}`);
+    
+    // Apply filters
+    allJobs = filterJobs(allJobs, searchQuery, experienceLevel);
+    console.log(`[SCRAPER] Jobs after filtering: ${allJobs.length}`);
 
     if (allJobs.length === 0) {
       return new Response(
         JSON.stringify({ 
-          success: false, 
+          success: true, 
           count: 0,
-          message: "No jobs found from any source" 
+          jobs: [],
+          message: "No jobs found matching your criteria" 
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -299,6 +308,7 @@ serve(async (req) => {
       );
     }
 
+    // Upsert jobs to database
     const { error } = await supabaseClient
       .from("jobs")
       .upsert(allJobs, {
@@ -317,7 +327,10 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         count: allJobs.length,
-        message: `Successfully scraped ${allJobs.length} jobs` 
+        jobs: allJobs,
+        boards: boards,
+        searchQuery: searchQuery || null,
+        message: `Successfully scraped ${allJobs.length} jobs from ${boards.length} board(s)` 
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
