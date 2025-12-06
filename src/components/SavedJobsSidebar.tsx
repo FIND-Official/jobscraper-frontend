@@ -7,7 +7,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { PricingDialog } from "./PricingDialog";
-import { BillingDialog } from "./BillingDialog";
 import { format } from "date-fns";
 
 interface SavedJob {
@@ -50,7 +49,6 @@ export const SavedJobsSidebar = () => {
   const [selectedArchivedJobs, setSelectedArchivedJobs] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
-  const [showBilling, setShowBilling] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
   const [selectAllArchived, setSelectAllArchived] = useState(false);
   const [exportCount, setExportCount] = useState(0);
@@ -463,11 +461,11 @@ export const SavedJobsSidebar = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowBilling(true)}
+            onClick={() => setShowPricing(true)}
             className="w-full mb-3"
           >
             <CreditCard className="h-4 w-4 mr-2" />
-            Billing
+            Pricing
           </Button>
         )}
 
@@ -621,7 +619,6 @@ export const SavedJobsSidebar = () => {
       </div>
 
       <PricingDialog open={showPricing} onOpenChange={setShowPricing} />
-      <BillingDialog open={showBilling} onOpenChange={setShowBilling} />
     </>
   );
 };
