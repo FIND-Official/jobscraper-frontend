@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Check } from "lucide-react";
+import { Check, RefreshCw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -12,8 +12,29 @@ interface PricingDialogProps {
 }
 
 export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
-  const { user, session, subscriptionTier } = useAuth();
+  const { user, session, subscriptionTier, checkSubscription } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const isPro = subscriptionTier === "pro";
+
+  const handleRefreshStatus = async () => {
+    setRefreshing(true);
+    try {
+      await checkSubscription();
+      toast({
+        title: "Status updated",
+        description: "Your subscription status has been refreshed",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to refresh subscription status",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleUpgrade = async () => {
     if (!user || !session) {
@@ -48,15 +69,55 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
     }
   };
 
+  const handleManageSubscription = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-portal", {
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.url) {
+        window.open(data.url, "_blank");
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to open billing portal",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Choose Your Plan</DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-2xl">Choose Your Plan</DialogTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefreshStatus}
+              disabled={refreshing}
+              className="h-8 w-8 p-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
         </DialogHeader>
 
         <div className="grid md:grid-cols-2 gap-6 mt-6">
-          <div className="border border-border rounded-lg p-6 space-y-4">
+          <div className={`border rounded-lg p-6 space-y-4 ${!isPro ? 'border-primary border-2 relative' : 'border-border'}`}>
+            {!isPro && (
+              <div className="absolute -top-3 right-4 bg-primary text-primary-foreground px-3 py-1 rounded-full text-xs font-semibold">
+                Current Plan
+              </div>
+            )}
             <div>
               <h3 className="text-xl font-semibold">Free</h3>
               <p className="text-3xl font-bold mt-2">$0<span className="text-base text-muted-foreground">/month</span></p>
@@ -78,19 +139,20 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
             <Button
               variant="outline"
               className="w-full"
-              disabled={subscriptionTier === "free"}
+              disabled={!isPro || loading}
+              onClick={isPro ? handleManageSubscription : undefined}
             >
-              {subscriptionTier === "free" ? "Current Plan" : "Downgrade"}
+              {!isPro ? "Current Plan" : "Downgrade"}
             </Button>
           </div>
 
-          <div className="border-2 border-primary rounded-lg p-6 space-y-4 relative">
+          <div className={`border rounded-lg p-6 space-y-4 relative ${isPro ? 'border-primary border-2' : 'border-border'}`}>
             <div className="absolute -top-3 right-4 bg-primary text-primary-foreground px-3 py-1 rounded-full text-xs font-semibold">
-              Recommended
+              {isPro ? "Current Plan" : "Recommended"}
             </div>
             <div>
               <h3 className="text-xl font-semibold">Pro</h3>
-              <p className="text-3xl font-bold mt-2">$2.50<span className="text-base text-muted-foreground">/month</span></p>
+              <p className="text-3xl font-bold mt-2">$20<span className="text-base text-muted-foreground">/month</span></p>
             </div>
             <ul className="space-y-2">
               <li className="flex items-start gap-2 text-sm">
@@ -108,13 +170,19 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
             </ul>
             <Button
               className="w-full"
-              onClick={handleUpgrade}
-              disabled={loading || subscriptionTier === "pro"}
+              onClick={isPro ? handleManageSubscription : handleUpgrade}
+              disabled={loading}
             >
-              {loading ? "Loading..." : subscriptionTier === "pro" ? "Current Plan" : "Upgrade to Pro"}
+              {loading ? "Loading..." : isPro ? "Cancel Plan" : "Upgrade to Pro"}
             </Button>
           </div>
         </div>
+
+        {isPro && (
+          <p className="text-xs text-center text-muted-foreground mt-4">
+            Just upgraded? Click the refresh button above to update your status.
+          </p>
+        )}
       </DialogContent>
     </Dialog>
   );
