@@ -3,10 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, CreditCard, X } from "lucide-react";
+import { Check, CreditCard, X, RefreshCw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { format } from "date-fns";
 
 interface BillingDialogProps {
   open: boolean;
@@ -14,9 +15,29 @@ interface BillingDialogProps {
 }
 
 export const BillingDialog = ({ open, onOpenChange }: BillingDialogProps) => {
-  const { subscriptionTier, session } = useAuth();
+  const { subscriptionTier, subscriptionEnd, session, checkSubscription } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const isPro = subscriptionTier === "pro";
+
+  const handleRefreshStatus = async () => {
+    setRefreshing(true);
+    try {
+      await checkSubscription();
+      toast({
+        title: "Status updated",
+        description: "Your subscription status has been refreshed",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to refresh subscription status",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleManageSubscription = async () => {
     setLoading(true);
@@ -70,11 +91,22 @@ export const BillingDialog = ({ open, onOpenChange }: BillingDialogProps) => {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Subscription & Billing</DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-2xl">Subscription & Billing</DialogTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefreshStatus}
+              disabled={refreshing}
+              className="h-8 w-8 p-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          <Card className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+          <Card className={`p-6 border-2 ${isPro ? 'bg-gradient-to-br from-primary/10 to-primary/20 border-primary' : 'bg-gradient-to-br from-muted/30 to-muted/50 border-border'}`}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-xl font-bold">
@@ -83,9 +115,17 @@ export const BillingDialog = ({ open, onOpenChange }: BillingDialogProps) => {
                 <p className="text-sm text-muted-foreground mt-1">
                   {isPro ? "$20/month" : "Limited features"}
                 </p>
+                {isPro && subscriptionEnd && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Renews on {format(new Date(subscriptionEnd), "MMMM d, yyyy")}
+                  </p>
+                )}
               </div>
-              <Badge variant={isPro ? "default" : "secondary"} className="text-sm px-3 py-1">
-                {isPro ? "Active" : "Current"}
+              <Badge 
+                variant={isPro ? "default" : "secondary"} 
+                className={`text-sm px-3 py-1 ${isPro ? 'bg-primary text-primary-foreground' : ''}`}
+              >
+                {isPro ? "PRO" : "FREE"}
               </Badge>
             </div>
 
@@ -116,6 +156,16 @@ export const BillingDialog = ({ open, onOpenChange }: BillingDialogProps) => {
                 )}
                 <span className={!isPro ? "text-muted-foreground" : ""}>
                   Advanced AI parsing
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                {isPro ? (
+                  <Check className="h-4 w-4 text-primary" />
+                ) : (
+                  <X className="h-4 w-4 text-muted-foreground" />
+                )}
+                <span className={!isPro ? "text-muted-foreground" : ""}>
+                  Job archiving
                 </span>
               </div>
             </div>
@@ -159,10 +209,17 @@ export const BillingDialog = ({ open, onOpenChange }: BillingDialogProps) => {
                 <li>• Unlimited job exports and saves</li>
                 <li>• Access to all premium job boards</li>
                 <li>• Advanced AI-powered job parsing</li>
+                <li>• Job archiving for organization</li>
                 <li>• Priority email support</li>
                 <li>• Early access to new features</li>
               </ul>
             </div>
+          )}
+
+          {isPro && (
+            <p className="text-xs text-center text-muted-foreground">
+              Just upgraded? Click the refresh button above to update your status.
+            </p>
           )}
         </div>
       </DialogContent>

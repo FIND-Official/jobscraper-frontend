@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Download, Trash2, CreditCard } from "lucide-react";
+import { Download, Trash2, CreditCard, Archive, ArchiveRestore } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
@@ -21,24 +22,40 @@ interface SavedJob {
   };
 }
 
+interface ArchivedJob {
+  id: string;
+  job_id: string;
+  archived_at: string;
+  jobs: {
+    title: string;
+    company: string;
+    location: string;
+    apply_url: string;
+  };
+}
+
 interface ExportedJobsMap {
   [key: string]: boolean;
 }
 
-interface GroupedJobs {
-  [key: string]: SavedJob[];
+interface GroupedJobs<T> {
+  [key: string]: T[];
 }
 
 export const SavedJobsSidebar = () => {
   const { user, subscriptionTier } = useAuth();
   const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
+  const [archivedJobs, setArchivedJobs] = useState<ArchivedJob[]>([]);
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
+  const [selectedArchivedJobs, setSelectedArchivedJobs] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
+  const [selectAllArchived, setSelectAllArchived] = useState(false);
   const [exportCount, setExportCount] = useState(0);
   const [exportedJobIds, setExportedJobIds] = useState<ExportedJobsMap>({});
+  const [activeTab, setActiveTab] = useState("saved");
 
   const fetchSavedJobs = async () => {
     if (!user) return;
@@ -60,10 +77,26 @@ export const SavedJobsSidebar = () => {
     }
   };
 
+  const fetchArchivedJobs = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("archived_jobs")
+        .select("id, job_id, archived_at, jobs(title, company, location, apply_url)")
+        .eq("user_id", user.id)
+        .order("archived_at", { ascending: false });
+
+      if (error) throw error;
+      setArchivedJobs(data || []);
+    } catch (error) {
+      console.error("Error fetching archived jobs:", error);
+    }
+  };
+
   useEffect(() => {
     const count = parseInt(localStorage.getItem(`exportCount_${user?.id}`) || "0");
     setExportCount(count);
-    // Load exported job IDs
     const exported = localStorage.getItem(`exportedJobs_${user?.id}`);
     if (exported) {
       const ids = JSON.parse(exported) as string[];
@@ -73,9 +106,9 @@ export const SavedJobsSidebar = () => {
 
   useEffect(() => {
     fetchSavedJobs();
+    fetchArchivedJobs();
   }, [user]);
 
-  // Real-time subscription for saved jobs
   useEffect(() => {
     if (!user) return;
 
@@ -91,6 +124,18 @@ export const SavedJobsSidebar = () => {
         },
         () => {
           fetchSavedJobs();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'archived_jobs',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          fetchArchivedJobs();
         }
       )
       .subscribe();
@@ -111,6 +156,17 @@ export const SavedJobsSidebar = () => {
     setSelectAll(newSelected.size === savedJobs.length);
   };
 
+  const handleToggleArchived = (jobId: string) => {
+    const newSelected = new Set(selectedArchivedJobs);
+    if (newSelected.has(jobId)) {
+      newSelected.delete(jobId);
+    } else {
+      newSelected.add(jobId);
+    }
+    setSelectedArchivedJobs(newSelected);
+    setSelectAllArchived(newSelected.size === archivedJobs.length);
+  };
+
   const handleSelectAll = () => {
     if (selectAll) {
       setSelectedJobs(new Set());
@@ -118,6 +174,16 @@ export const SavedJobsSidebar = () => {
     } else {
       setSelectedJobs(new Set(savedJobs.map(job => job.id)));
       setSelectAll(true);
+    }
+  };
+
+  const handleSelectAllArchived = () => {
+    if (selectAllArchived) {
+      setSelectedArchivedJobs(new Set());
+      setSelectAllArchived(false);
+    } else {
+      setSelectedArchivedJobs(new Set(archivedJobs.map(job => job.id)));
+      setSelectAllArchived(true);
     }
   };
 
@@ -149,6 +215,99 @@ export const SavedJobsSidebar = () => {
     }
   };
 
+  const handleArchiveSelected = async () => {
+    if (selectedJobs.size === 0 || !user) return;
+
+    try {
+      // Get the job_ids of selected saved jobs
+      const jobsToArchive = savedJobs.filter(job => selectedJobs.has(job.id));
+      
+      // Insert into archived_jobs
+      const { error: archiveError } = await supabase
+        .from("archived_jobs")
+        .upsert(
+          jobsToArchive.map(job => ({
+            user_id: user.id,
+            job_id: job.job_id,
+          })),
+          { onConflict: 'user_id,job_id' }
+        );
+
+      if (archiveError) throw archiveError;
+
+      // Remove from saved_jobs
+      const { error: deleteError } = await supabase
+        .from("saved_jobs")
+        .delete()
+        .in("id", Array.from(selectedJobs));
+
+      if (deleteError) throw deleteError;
+      
+      setSelectedJobs(new Set());
+      setSelectAll(false);
+      
+      toast({
+        title: "Jobs archived",
+        description: `${jobsToArchive.length} job(s) moved to archive`,
+      });
+      
+      fetchSavedJobs();
+      fetchArchivedJobs();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to archive jobs",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRestoreSelected = async () => {
+    if (selectedArchivedJobs.size === 0 || !user) return;
+
+    try {
+      const jobsToRestore = archivedJobs.filter(job => selectedArchivedJobs.has(job.id));
+      
+      // Insert back into saved_jobs
+      const { error: saveError } = await supabase
+        .from("saved_jobs")
+        .upsert(
+          jobsToRestore.map(job => ({
+            user_id: user.id,
+            job_id: job.job_id,
+          })),
+          { onConflict: 'user_id,job_id', ignoreDuplicates: true }
+        );
+
+      if (saveError) throw saveError;
+
+      // Remove from archived_jobs
+      const { error: deleteError } = await supabase
+        .from("archived_jobs")
+        .delete()
+        .in("id", Array.from(selectedArchivedJobs));
+
+      if (deleteError) throw deleteError;
+      
+      setSelectedArchivedJobs(new Set());
+      setSelectAllArchived(false);
+      
+      toast({
+        title: "Jobs restored",
+        description: `${jobsToRestore.length} job(s) restored to saved list`,
+      });
+      
+      fetchSavedJobs();
+      fetchArchivedJobs();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to restore jobs",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleDelete = async (savedJobId: string) => {
     try {
       const { error } = await supabase
@@ -172,8 +331,30 @@ export const SavedJobsSidebar = () => {
     }
   };
 
+  const handleDeleteArchived = async (archivedJobId: string) => {
+    try {
+      const { error } = await supabase
+        .from("archived_jobs")
+        .delete()
+        .eq("id", archivedJobId);
+
+      if (error) throw error;
+      
+      setArchivedJobs(archivedJobs.filter(job => job.id !== archivedJobId));
+      toast({
+        title: "Job removed",
+        description: "Job removed from archive",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to remove job",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleExport = async () => {
-    // Check export limits for free tier
     if (subscriptionTier === "free" && exportCount >= 50) {
       toast({
         title: "Export limit reached",
@@ -211,7 +392,6 @@ export const SavedJobsSidebar = () => {
         throw error;
       }
 
-      // Create blob and download
       const blob = new Blob([data], { type: "text/csv" });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -220,14 +400,12 @@ export const SavedJobsSidebar = () => {
       a.click();
       window.URL.revokeObjectURL(url);
 
-      // Increment export count for free tier
       if (subscriptionTier === "free") {
         const newCount = exportCount + savedJobs.length;
         setExportCount(newCount);
         localStorage.setItem(`exportCount_${user?.id}`, newCount.toString());
       }
 
-      // Mark jobs as exported
       const exportedIds = savedJobs.map(job => job.job_id);
       const existingExported = JSON.parse(localStorage.getItem(`exportedJobs_${user?.id}`) || "[]");
       const updatedExported = [...new Set([...existingExported, ...exportedIds])];
@@ -247,9 +425,17 @@ export const SavedJobsSidebar = () => {
     }
   };
 
-  // Group jobs by date
-  const groupedJobs = savedJobs.reduce<GroupedJobs>((acc, job) => {
+  const groupedSavedJobs = savedJobs.reduce<GroupedJobs<SavedJob>>((acc, job) => {
     const date = format(new Date(job.saved_at), "dd/MM/yyyy HH:mm");
+    if (!acc[date]) {
+      acc[date] = [];
+    }
+    acc[date].push(job);
+    return acc;
+  }, {});
+
+  const groupedArchivedJobs = archivedJobs.reduce<GroupedJobs<ArchivedJob>>((acc, job) => {
+    const date = format(new Date(job.archived_at), "dd/MM/yyyy HH:mm");
     if (!acc[date]) {
       acc[date] = [];
     }
@@ -259,18 +445,18 @@ export const SavedJobsSidebar = () => {
 
   return (
     <>
-      <div className="fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-card border-l border-border p-6 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Saved Jobs</h2>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleExport}
-          disabled={selectedJobs.size === 0}
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Export
-        </Button>
+      <div className="fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-card border-l border-border p-4 overflow-y-auto">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Jobs</h2>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleExport}
+            disabled={selectedJobs.size === 0}
+          >
+            <Download className="h-4 w-4 mr-1" />
+            Export
+          </Button>
         </div>
 
         {user && (
@@ -278,7 +464,7 @@ export const SavedJobsSidebar = () => {
             variant="outline"
             size="sm"
             onClick={() => setShowBilling(true)}
-            className="w-full mb-4"
+            className="w-full mb-3"
           >
             <CreditCard className="h-4 w-4 mr-2" />
             Billing
@@ -289,66 +475,148 @@ export const SavedJobsSidebar = () => {
           <p className="text-sm text-muted-foreground">Sign in to save jobs</p>
         ) : loading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
-        ) : savedJobs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No saved jobs yet</p>
         ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={selectAll}
-                  onCheckedChange={handleSelectAll}
-                />
-                <span className="text-xs text-muted-foreground">Select all</span>
-              </div>
-              {selectedJobs.size > 0 && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleDeleteSelected}
-                  className="h-7 text-xs text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-3 w-3 mr-1" />
-                  Delete ({selectedJobs.size})
-                </Button>
-              )}
-            </div>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-3">
+              <TabsTrigger value="saved" className="text-xs">
+                Saved ({savedJobs.length})
+              </TabsTrigger>
+              <TabsTrigger value="archived" className="text-xs">
+                Archived ({archivedJobs.length})
+              </TabsTrigger>
+            </TabsList>
 
-            {Object.entries(groupedJobs).map(([dateTime, jobs]) => (
-              <div key={dateTime} className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  {dateTime}
-                </p>
-                {jobs.map((savedJob) => (
-                  <div key={savedJob.id} className="bg-secondary/50 rounded-lg p-3 space-y-2">
-                    <div className="flex items-start gap-2">
+            <TabsContent value="saved" className="mt-0">
+              {savedJobs.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No saved jobs yet</p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-border">
+                    <div className="flex items-center gap-2">
                       <Checkbox
-                        checked={selectedJobs.has(savedJob.id)}
-                        onCheckedChange={() => handleToggle(savedJob.id)}
+                        checked={selectAll}
+                        onCheckedChange={handleSelectAll}
                       />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <h3 className="text-sm font-medium truncate">{savedJob.jobs.title}</h3>
-                          {exportedJobIds[savedJob.job_id] && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full whitespace-nowrap">
-                              Exported
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate">{savedJob.jobs.company}</p>
-                      </div>
-                      <button
-                        onClick={() => handleDelete(savedJob.id)}
-                        className="text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <span className="text-xs text-muted-foreground">Select all</span>
                     </div>
+                    {selectedJobs.size > 0 && (
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={handleArchiveSelected}
+                          className="h-7 text-xs"
+                        >
+                          <Archive className="h-3 w-3 mr-1" />
+                          Archive
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={handleDeleteSelected}
+                          className="h-7 text-xs text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            ))}
-          </div>
+
+                  {Object.entries(groupedSavedJobs).map(([dateTime, jobs]) => (
+                    <div key={dateTime} className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        {dateTime}
+                      </p>
+                      {jobs.map((savedJob) => (
+                        <div key={savedJob.id} className="bg-secondary/50 rounded-lg p-2.5 space-y-1">
+                          <div className="flex items-start gap-2">
+                            <Checkbox
+                              checked={selectedJobs.has(savedJob.id)}
+                              onCheckedChange={() => handleToggle(savedJob.id)}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <h3 className="text-sm font-medium truncate">{savedJob.jobs.title}</h3>
+                                {exportedJobIds[savedJob.job_id] && (
+                                  <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full whitespace-nowrap">
+                                    Exported
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground truncate">{savedJob.jobs.company}</p>
+                            </div>
+                            <button
+                              onClick={() => handleDelete(savedJob.id)}
+                              className="text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="archived" className="mt-0">
+              {archivedJobs.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No archived jobs</p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-border">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={selectAllArchived}
+                        onCheckedChange={handleSelectAllArchived}
+                      />
+                      <span className="text-xs text-muted-foreground">Select all</span>
+                    </div>
+                    {selectedArchivedJobs.size > 0 && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleRestoreSelected}
+                        className="h-7 text-xs"
+                      >
+                        <ArchiveRestore className="h-3 w-3 mr-1" />
+                        Restore ({selectedArchivedJobs.size})
+                      </Button>
+                    )}
+                  </div>
+
+                  {Object.entries(groupedArchivedJobs).map(([dateTime, jobs]) => (
+                    <div key={dateTime} className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        {dateTime}
+                      </p>
+                      {jobs.map((archivedJob) => (
+                        <div key={archivedJob.id} className="bg-secondary/50 rounded-lg p-2.5 space-y-1">
+                          <div className="flex items-start gap-2">
+                            <Checkbox
+                              checked={selectedArchivedJobs.has(archivedJob.id)}
+                              onCheckedChange={() => handleToggleArchived(archivedJob.id)}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-sm font-medium truncate">{archivedJob.jobs.title}</h3>
+                              <p className="text-xs text-muted-foreground truncate">{archivedJob.jobs.company}</p>
+                            </div>
+                            <button
+                              onClick={() => handleDeleteArchived(archivedJob.id)}
+                              className="text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         )}
       </div>
 
