@@ -1,10 +1,13 @@
-import { Twitter, Linkedin, LogOut } from "lucide-react";
+import { Twitter, Linkedin, LogOut, LogIn } from "lucide-react";
+import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
+import { AuthDialog } from "./AuthDialog";
 
 export const Header = () => {
   const { user, signOut } = useAuth();
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -39,7 +42,7 @@ export const Header = () => {
             <Linkedin className="h-5 w-5" />
           </a>
           
-          {user && (
+          {user ? (
             <Button
               variant="ghost"
               size="icon"
@@ -48,9 +51,21 @@ export const Header = () => {
             >
               <LogOut className="h-5 w-5" />
             </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAuthDialogOpen(true)}
+              className="gap-2"
+            >
+              <LogIn className="h-4 w-4" />
+              Sign In
+            </Button>
           )}
         </div>
       </div>
+      
+      <AuthDialog open={authDialogOpen} onOpenChange={setAuthDialogOpen} />
     </header>
   );
 };
