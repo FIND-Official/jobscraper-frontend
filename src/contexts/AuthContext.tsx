@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -8,6 +8,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   subscriptionTier: "free" | "pro";
+  subscriptionEnd: string | null;
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -21,37 +22,53 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [subscriptionTier, setSubscriptionTier] = useState<"free" | "pro">("free");
+  const [subscriptionEnd, setSubscriptionEnd] = useState<string | null>(null);
 
-  const checkSubscription = async () => {
-    if (!session) return;
+  const checkSubscription = useCallback(async () => {
+    const currentSession = session || (await supabase.auth.getSession()).data.session;
+    if (!currentSession) return;
     
     try {
+      console.log("[AUTH] Checking subscription status...");
       const { data, error } = await supabase.functions.invoke("check-subscription", {
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${currentSession.access_token}`,
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("[AUTH] Subscription check error:", error);
+        return;
+      }
+      
+      console.log("[AUTH] Subscription response:", data);
+      
       if (data?.tier) {
         setSubscriptionTier(data.tier);
+        console.log("[AUTH] Updated subscription tier to:", data.tier);
+      }
+      if (data?.subscription_end) {
+        setSubscriptionEnd(data.subscription_end);
       }
     } catch (error) {
-      console.error("Error checking subscription:", error);
+      console.error("[AUTH] Error checking subscription:", error);
     }
-  };
+  }, [session]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
+        console.log("[AUTH] Auth state changed:", event);
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
         
         if (session?.user) {
-          setTimeout(() => checkSubscription(), 0);
+          // Delay to avoid race conditions with Supabase
+          setTimeout(() => checkSubscription(), 500);
         } else {
           setSubscriptionTier("free");
+          setSubscriptionEnd(null);
         }
       }
     );
@@ -62,12 +79,49 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(false);
       
       if (session?.user) {
-        setTimeout(() => checkSubscription(), 0);
+        setTimeout(() => checkSubscription(), 500);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Check subscription when window gains focus (user returning from Stripe)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (session?.user) {
+        console.log("[AUTH] Window focused, checking subscription...");
+        checkSubscription();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && session?.user) {
+        console.log("[AUTH] Tab visible, checking subscription...");
+        checkSubscription();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [session, checkSubscription]);
+
+  // Periodic subscription check every 60 seconds
+  useEffect(() => {
+    if (!session?.user) return;
+
+    const interval = setInterval(() => {
+      console.log("[AUTH] Periodic subscription check...");
+      checkSubscription();
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [session, checkSubscription]);
 
   const signUp = async (email: string, password: string) => {
     const redirectUrl = `${window.location.origin}/`;
@@ -103,6 +157,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     setSubscriptionTier("free");
+    setSubscriptionEnd(null);
     toast({
       title: "Signed out",
       description: "You have been signed out successfully",
@@ -116,6 +171,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         session,
         loading,
         subscriptionTier,
+        subscriptionEnd,
         signUp,
         signIn,
         signOut,

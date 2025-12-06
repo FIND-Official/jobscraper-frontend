@@ -14,6 +14,35 @@ export type Database = {
   }
   public: {
     Tables: {
+      archived_jobs: {
+        Row: {
+          archived_at: string
+          id: string
+          job_id: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string
+          id?: string
+          job_id: string
+          user_id: string
+        }
+        Update: {
+          archived_at?: string
+          id?: string
+          job_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "archived_jobs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       jobs: {
         Row: {
           apply_url: string
