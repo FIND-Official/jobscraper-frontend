@@ -51,9 +51,11 @@ export const SavedJobsSidebar = () => {
   const [showPricing, setShowPricing] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
   const [selectAllArchived, setSelectAllArchived] = useState(false);
-  const [exportCount, setExportCount] = useState(0);
+  const [monthlyExportCount, setMonthlyExportCount] = useState(0);
   const [exportedJobIds, setExportedJobIds] = useState<ExportedJobsMap>({});
   const [activeTab, setActiveTab] = useState("saved");
+
+  const FREE_EXPORT_LIMIT = 50;
 
   const fetchSavedJobs = async () => {
     if (!user) return;
@@ -92,9 +94,43 @@ export const SavedJobsSidebar = () => {
     }
   };
 
+  const fetchMonthlyExportCount = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("monthly_export_count, export_reset_date")
+        .eq("id", user.id)
+        .single();
+      
+      if (error) throw error;
+      
+      // Check if we need to reset the counter (new month)
+      const resetDate = new Date(data.export_reset_date);
+      const now = new Date();
+      
+      if (now >= resetDate) {
+        // Reset the counter for the new month
+        const nextResetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        await supabase
+          .from("profiles")
+          .update({
+            monthly_export_count: 0,
+            export_reset_date: nextResetDate.toISOString()
+          })
+          .eq("id", user.id);
+        setMonthlyExportCount(0);
+      } else {
+        setMonthlyExportCount(data.monthly_export_count);
+      }
+    } catch (error) {
+      console.error("Error fetching export count:", error);
+    }
+  };
+
   useEffect(() => {
-    const count = parseInt(localStorage.getItem(`exportCount_${user?.id}`) || "0");
-    setExportCount(count);
+    fetchMonthlyExportCount();
     const exported = localStorage.getItem(`exportedJobs_${user?.id}`);
     if (exported) {
       const ids = JSON.parse(exported) as string[];
@@ -353,10 +389,15 @@ export const SavedJobsSidebar = () => {
   };
 
   const handleExport = async () => {
-    if (subscriptionTier === "free" && exportCount >= 50) {
+    const jobsToExportCount = savedJobs.length;
+    
+    if (subscriptionTier === "free" && (monthlyExportCount + jobsToExportCount) > FREE_EXPORT_LIMIT) {
+      const remaining = FREE_EXPORT_LIMIT - monthlyExportCount;
       toast({
         title: "Export limit reached",
-        description: "Free plan users can export 50 jobs per month. Upgrade to Pro for unlimited exports.",
+        description: remaining > 0 
+          ? `You can only export ${remaining} more job(s) this month. Upgrade to Pro for unlimited exports.`
+          : "Free plan users can export 50 jobs per month. Upgrade to Pro for unlimited exports.",
         variant: "destructive",
       });
       setShowPricing(true);
@@ -398,10 +439,15 @@ export const SavedJobsSidebar = () => {
       a.click();
       window.URL.revokeObjectURL(url);
 
-      if (subscriptionTier === "free") {
-        const newCount = exportCount + savedJobs.length;
-        setExportCount(newCount);
-        localStorage.setItem(`exportCount_${user?.id}`, newCount.toString());
+      // Update monthly export count in database for free users
+      if (subscriptionTier === "free" && user) {
+        const newCount = monthlyExportCount + jobsToExportCount;
+        setMonthlyExportCount(newCount);
+        
+        await supabase
+          .from("profiles")
+          .update({ monthly_export_count: newCount })
+          .eq("id", user.id);
       }
 
       const exportedIds = savedJobs.map(job => job.job_id);
@@ -441,20 +487,29 @@ export const SavedJobsSidebar = () => {
     return acc;
   }, {});
 
+  const remainingExports = FREE_EXPORT_LIMIT - monthlyExportCount;
+
   return (
     <>
       <div className="fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-card border-l border-border p-4 overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Jobs</h2>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleExport}
-            disabled={selectedJobs.size === 0}
-          >
-            <Download className="h-4 w-4 mr-1" />
-            Export
-          </Button>
+          <div className="flex items-center gap-2">
+            {user && subscriptionTier === "free" && (
+              <span className="text-xs text-muted-foreground">
+                {remainingExports}/{FREE_EXPORT_LIMIT}
+              </span>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExport}
+              disabled={savedJobs.length === 0}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Export
+            </Button>
+          </div>
         </div>
 
         {user && (
