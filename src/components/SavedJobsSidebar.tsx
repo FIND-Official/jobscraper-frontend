@@ -493,7 +493,7 @@ export const SavedJobsSidebar = () => {
     <>
       <div className="fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-card border-l border-border p-4 overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Jobs</h2>
+          <h2 className="text-lg font-semibold">Saved Jobs</h2>
           <div className="flex items-center gap-2">
             {user && subscriptionTier === "free" && (
               <span className="text-xs text-muted-foreground">
