@@ -252,14 +252,35 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
     setSelectAll(newSelected.size === currentJobs.length);
   };
 
-  const handleClearSelected = () => {
+  const handleClearSelected = async () => {
     const count = selectedJobs.size;
-    setSelectedJobs(new Set());
-    setSelectAll(false);
-    toast({
-      title: "Selection cleared",
-      description: `${count} job(s) deselected`,
-    });
+    const jobIdsToDelete = Array.from(selectedJobs);
+    
+    try {
+      // Delete selected jobs from the database
+      const { error } = await supabase
+        .from("jobs")
+        .delete()
+        .in("id", jobIdsToDelete);
+      
+      if (error) throw error;
+      
+      // Remove deleted jobs from local state
+      setJobs(prevJobs => prevJobs.filter(job => !selectedJobs.has(job.id)));
+      setSelectedJobs(new Set());
+      setSelectAll(false);
+      
+      toast({
+        title: "Jobs removed",
+        description: `${count} job(s) deleted from results`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete jobs",
+        variant: "destructive",
+      });
+    }
   };
 
   const isJobStale = (job: DeduplicatedJob) => {
@@ -356,8 +377,8 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
                     onClick={handleClearSelected}
                     className="h-8 text-xs text-destructive hover:text-destructive"
                   >
-                    <X className="h-3 w-3 mr-1" />
-                    Clear ({selectedJobs.size})
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    Delete ({selectedJobs.size})
                   </Button>
                 )}
               </div>
