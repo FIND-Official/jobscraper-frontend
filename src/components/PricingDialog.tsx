@@ -4,7 +4,7 @@ import { Check, RefreshCw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface PricingDialogProps {
   open: boolean;
@@ -16,6 +16,13 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const isPro = subscriptionTier === "pro";
+
+  // Check subscription when dialog opens (user returning from Stripe)
+  useEffect(() => {
+    if (open && user) {
+      checkSubscription();
+    }
+  }, [open, user, checkSubscription]);
 
   const handleRefreshStatus = async () => {
     setRefreshing(true);
@@ -125,15 +132,15 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
             <ul className="space-y-2">
               <li className="flex items-start gap-2 text-sm">
                 <Check className="h-4 w-4 text-primary mt-0.5" />
-                <span>Browse all remote jobs</span>
+                <span>50 job exports per month</span>
+              </li>
+              <li className="flex items-start gap-2 text-sm">
+                <Check className="h-4 w-4 text-primary mt-0.5" />
+                <span>2 job boards</span>
               </li>
               <li className="flex items-start gap-2 text-sm">
                 <Check className="h-4 w-4 text-primary mt-0.5" />
                 <span>Save unlimited jobs</span>
-              </li>
-              <li className="flex items-start gap-2 text-sm">
-                <Check className="h-4 w-4 text-primary mt-0.5" />
-                <span>Filter by job board</span>
               </li>
             </ul>
             <Button
@@ -157,15 +164,23 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
             <ul className="space-y-2">
               <li className="flex items-start gap-2 text-sm">
                 <Check className="h-4 w-4 text-primary mt-0.5" />
-                <span>Everything in Free</span>
+                <span>Unlimited job exports and saves</span>
               </li>
               <li className="flex items-start gap-2 text-sm">
                 <Check className="h-4 w-4 text-primary mt-0.5" />
-                <span>Export saved jobs as CSV</span>
+                <span>Access to all job boards</span>
               </li>
               <li className="flex items-start gap-2 text-sm">
                 <Check className="h-4 w-4 text-primary mt-0.5" />
-                <span>Priority support</span>
+                <span>Advanced AI-powered job parsing</span>
+              </li>
+              <li className="flex items-start gap-2 text-sm">
+                <Check className="h-4 w-4 text-primary mt-0.5" />
+                <span>Priority email support</span>
+              </li>
+              <li className="flex items-start gap-2 text-sm">
+                <Check className="h-4 w-4 text-primary mt-0.5" />
+                <span>Early access to new features</span>
               </li>
             </ul>
             <Button
