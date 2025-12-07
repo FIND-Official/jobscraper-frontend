@@ -44,11 +44,14 @@ interface JobListProps {
   refreshTrigger?: number;
 }
 
+const DISMISSED_JOBS_KEY = "dismissed_jobs_anonymous";
+
 export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }: JobListProps) => {
   const { user } = useAuth();
   const [jobs, setJobs] = useState<DeduplicatedJob[]>([]);
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set());
   const [exportedJobIds, setExportedJobIds] = useState<Set<string>>(new Set());
+  const [dismissedJobIds, setDismissedJobIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -61,19 +64,24 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
   const jobsPerPage = 10;
 
   useEffect(() => {
-    fetchJobs();
+    fetchDismissedJobs();
     if (user) {
       fetchSavedJobs();
       loadExportedJobs();
     }
   }, [user]);
 
+  // Fetch jobs after dismissedJobIds is loaded
+  useEffect(() => {
+    fetchJobs();
+  }, [dismissedJobIds]);
+
   // Refresh jobs when scrape completes
   useEffect(() => {
     if (refreshTrigger && refreshTrigger > 0) {
       fetchJobs();
     }
-  }, [refreshTrigger]);
+  }, [refreshTrigger, dismissedJobIds]);
 
   // Real-time subscription for saved jobs
   useEffect(() => {
@@ -149,6 +157,29 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
     );
   };
 
+  const fetchDismissedJobs = async () => {
+    if (user) {
+      // Fetch from database for authenticated users
+      try {
+        const { data, error } = await supabase
+          .from("dismissed_jobs")
+          .select("job_id")
+          .eq("user_id", user.id);
+        
+        if (error) throw error;
+        setDismissedJobIds(new Set(data.map(item => item.job_id)));
+      } catch (error) {
+        console.error("Error fetching dismissed jobs:", error);
+      }
+    } else {
+      // Use localStorage for anonymous users
+      const dismissed = localStorage.getItem(DISMISSED_JOBS_KEY);
+      if (dismissed) {
+        setDismissedJobIds(new Set(JSON.parse(dismissed)));
+      }
+    }
+  };
+
   const fetchJobs = async () => {
     setLoading(true);
     try {
@@ -159,7 +190,10 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
         .limit(500);
 
       if (error) throw error;
-      const deduplicated = deduplicateJobs(data || []);
+      
+      // Filter out dismissed jobs
+      const filteredData = (data || []).filter(job => !dismissedJobIds.has(job.id));
+      const deduplicated = deduplicateJobs(filteredData);
       setJobs(deduplicated);
     } catch (error) {
       console.error("Error fetching jobs:", error);
@@ -254,30 +288,44 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
 
   const handleClearSelected = async () => {
     const count = selectedJobs.size;
-    const jobIdsToDelete = Array.from(selectedJobs);
+    const jobIdsToDismiss = Array.from(selectedJobs);
     
     try {
-      // Delete selected jobs from the database
-      const { error } = await supabase
-        .from("jobs")
-        .delete()
-        .in("id", jobIdsToDelete);
+      if (user) {
+        // Store dismissed jobs in database for authenticated users
+        const { error } = await supabase
+          .from("dismissed_jobs")
+          .upsert(
+            jobIdsToDismiss.map(jobId => ({
+              user_id: user.id,
+              job_id: jobId,
+            })),
+            { onConflict: 'user_id,job_id' }
+          );
+        
+        if (error) throw error;
+      } else {
+        // Store in localStorage for anonymous users
+        const existingDismissed = JSON.parse(localStorage.getItem(DISMISSED_JOBS_KEY) || "[]");
+        const updatedDismissed = [...new Set([...existingDismissed, ...jobIdsToDismiss])];
+        localStorage.setItem(DISMISSED_JOBS_KEY, JSON.stringify(updatedDismissed));
+      }
       
-      if (error) throw error;
-      
-      // Remove deleted jobs from local state
+      // Update local state
+      const newDismissed = new Set([...dismissedJobIds, ...jobIdsToDismiss]);
+      setDismissedJobIds(newDismissed);
       setJobs(prevJobs => prevJobs.filter(job => !selectedJobs.has(job.id)));
       setSelectedJobs(new Set());
       setSelectAll(false);
       
       toast({
-        title: "Jobs removed",
-        description: `${count} job(s) deleted from results`,
+        title: "Jobs dismissed",
+        description: `${count} job(s) removed from results`,
       });
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to delete jobs",
+        description: error.message || "Failed to dismiss jobs",
         variant: "destructive",
       });
     }
