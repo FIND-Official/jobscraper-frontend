@@ -43,6 +43,35 @@ export type Database = {
           },
         ]
       }
+      dismissed_jobs: {
+        Row: {
+          dismissed_at: string
+          id: string
+          job_id: string
+          user_id: string
+        }
+        Insert: {
+          dismissed_at?: string
+          id?: string
+          job_id: string
+          user_id: string
+        }
+        Update: {
+          dismissed_at?: string
+          id?: string
+          job_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dismissed_jobs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       jobs: {
         Row: {
           apply_url: string
@@ -89,7 +118,9 @@ export type Database = {
         Row: {
           created_at: string
           email: string
+          export_reset_date: string
           id: string
+          monthly_export_count: number
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_expires_at: string | null
@@ -99,7 +130,9 @@ export type Database = {
         Insert: {
           created_at?: string
           email: string
+          export_reset_date?: string
           id: string
+          monthly_export_count?: number
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_expires_at?: string | null
@@ -109,7 +142,9 @@ export type Database = {
         Update: {
           created_at?: string
           email?: string
+          export_reset_date?: string
           id?: string
+          monthly_export_count?: number
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_expires_at?: string | null
