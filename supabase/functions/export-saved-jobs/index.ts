@@ -130,40 +130,40 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
+    // Parse request body to get selected job IDs
+    let selectedJobIds: string[] = [];
+    try {
+      const body = await req.json();
+      selectedJobIds = body.jobIds || [];
+    } catch {
+      // No body provided, will export all saved jobs
+    }
+
+    logStep("Selected job IDs for export", { count: selectedJobIds.length });
+
     // Check subscription status via Stripe
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     
-    if (customers.data.length === 0) {
-      logStep("No Stripe customer found - user not subscribed");
-      return new Response(JSON.stringify({ error: "Pro subscription required to export jobs" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 403,
+    let isPro = false;
+    if (customers.data.length > 0) {
+      const customerId = customers.data[0].id;
+      const subscriptions = await stripe.subscriptions.list({
+        customer: customerId,
+        status: "active",
+        limit: 1,
       });
+      isPro = subscriptions.data.length > 0;
     }
 
-    const customerId = customers.data[0].id;
-    const subscriptions = await stripe.subscriptions.list({
-      customer: customerId,
-      status: "active",
-      limit: 1,
-    });
+    logStep("Subscription status", { isPro });
 
-    if (subscriptions.data.length === 0) {
-      logStep("No active subscription found");
-      return new Response(JSON.stringify({ error: "Pro subscription required to export jobs" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 403,
-      });
-    }
-
-    logStep("Active subscription verified", { subscriptionId: subscriptions.data[0].id });
-
-    // Fetch saved jobs with full job details
-    const { data: savedJobs, error: jobsError } = await supabaseClient
+    // Fetch saved jobs - filter by selected IDs if provided
+    let query = supabaseClient
       .from("saved_jobs")
       .select(`
         id,
+        job_id,
         jobs (
           title,
           company,
@@ -175,6 +175,13 @@ serve(async (req) => {
         )
       `)
       .eq("user_id", user.id);
+
+    // If specific job IDs are selected, only export those
+    if (selectedJobIds.length > 0) {
+      query = query.in("id", selectedJobIds);
+    }
+
+    const { data: savedJobs, error: jobsError } = await query;
 
     if (jobsError) throw new Error(`Error fetching saved jobs: ${jobsError.message}`);
     if (!savedJobs || savedJobs.length === 0) {
@@ -212,7 +219,7 @@ serve(async (req) => {
     }
 
     const csv = csvRows.join('\n');
-    logStep("CSV generated successfully with enhanced columns");
+    logStep("CSV generated successfully", { rowCount: csvRows.length });
 
     return new Response(csv, {
       headers: {
