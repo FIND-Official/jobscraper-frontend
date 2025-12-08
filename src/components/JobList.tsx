@@ -45,6 +45,7 @@ interface JobListProps {
 }
 
 const DISMISSED_JOBS_KEY = "dismissed_jobs_anonymous";
+const HAS_SCRAPED_KEY = "has_scraped_jobs";
 
 export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }: JobListProps) => {
   const { user } = useAuth();
@@ -61,7 +62,14 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
   const [showJobDetail, setShowJobDetail] = useState(false);
   const [urlFirstSeen, setUrlFirstSeen] = useState<Map<string, string>>(new Map());
   const [sortBy, setSortBy] = useState<"relevance" | "date">("relevance");
+  const [hasScraped, setHasScraped] = useState(false);
   const jobsPerPage = 10;
+
+  // Check if user has scraped before
+  useEffect(() => {
+    const scraped = localStorage.getItem(HAS_SCRAPED_KEY);
+    setHasScraped(scraped === "true");
+  }, []);
 
   useEffect(() => {
     fetchDismissedJobs();
@@ -73,15 +81,23 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
 
   // Fetch jobs after dismissedJobIds is loaded
   useEffect(() => {
-    fetchJobs();
-  }, [dismissedJobIds]);
+    // Only fetch jobs if user has scraped before or is authenticated
+    if (hasScraped || user) {
+      fetchJobs();
+    } else {
+      setLoading(false);
+    }
+  }, [dismissedJobIds, hasScraped, user]);
 
   // Refresh jobs when scrape completes
   useEffect(() => {
     if (refreshTrigger && refreshTrigger > 0) {
+      // Mark that user has scraped
+      localStorage.setItem(HAS_SCRAPED_KEY, "true");
+      setHasScraped(true);
       fetchJobs();
     }
-  }, [refreshTrigger, dismissedJobIds]);
+  }, [refreshTrigger]);
 
   // Real-time subscription for saved jobs
   useEffect(() => {
@@ -367,6 +383,22 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
 
   const totalDuplicatesMerged = jobs.reduce((sum, job) => sum + job.duplicateCount, 0);
 
+  // Show empty state for anonymous users who haven't scraped yet
+  if (!hasScraped && !user) {
+    return (
+      <div className="space-y-8">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <h2 className="text-2xl font-semibold">
+            Results <span className="text-primary">0</span>
+          </h2>
+        </div>
+        <div className="text-center py-12 bg-card rounded-lg border border-border">
+          <p className="text-muted-foreground">No jobs found. Click "Scrape Jobs" to get started!</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="space-y-8">
@@ -508,41 +540,36 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
 
                       {job.description && (
                         <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-                          {job.description.replace(/<[^>]*>/g, "").substring(0, 200)}...
+                          {job.description.replace(/<[^>]*>/g, '').substring(0, 200)}...
                         </p>
                       )}
 
-                      {job.tags && job.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {job.tags.slice(0, 3).map((tag, index) => (
-                            <Badge key={index} variant="outline" className="text-xs">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {job.tags?.slice(0, 5).map((tag, index) => (
+                          <Badge key={index} variant="outline" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
-
-                    <div className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+                    
+                    <div 
+                      className="flex flex-col gap-2 flex-shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <Button
-                        variant="ghost"
-                        size="icon"
+                        variant={savedJobIds.has(job.id) ? "default" : "outline"}
+                        size="sm"
                         onClick={() => handleSave(job.id)}
-                        className={savedJobIds.has(job.id) ? "text-primary" : ""}
                       >
-                        <Bookmark
-                          className="h-5 w-5"
-                          fill={savedJobIds.has(job.id) ? "currentColor" : "none"}
-                        />
+                        <Bookmark className={`h-4 w-4 ${savedJobIds.has(job.id) ? "fill-current" : ""}`} />
                       </Button>
                       <Button
                         variant="outline"
-                        size="icon"
-                        asChild
+                        size="sm"
+                        onClick={() => window.open(job.apply_url, "_blank")}
                       >
-                        <a href={job.apply_url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="h-5 w-5" />
-                        </a>
+                        <ExternalLink className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -552,41 +579,22 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
           )}
         </div>
 
-        {jobs.length > jobsPerPage && (
-          <div className="flex items-center justify-center gap-2 pt-4">
+        {totalPages > 1 && (
+          <div className="flex justify-center gap-2">
             <Button
               variant="outline"
+              size="sm"
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
             >
-              Prev
+              Previous
             </Button>
-            
-            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-              let page;
-              if (totalPages <= 5) {
-                page = i + 1;
-              } else if (currentPage <= 3) {
-                page = i + 1;
-              } else if (currentPage >= totalPages - 2) {
-                page = totalPages - 4 + i;
-              } else {
-                page = currentPage - 2 + i;
-              }
-              return (
-                <Button
-                  key={page}
-                  variant={currentPage === page ? "default" : "outline"}
-                  onClick={() => setCurrentPage(page)}
-                  className="w-10"
-                >
-                  {page}
-                </Button>
-              );
-            })}
-
+            <span className="flex items-center px-4 text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </span>
             <Button
               variant="outline"
+              size="sm"
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
             >
@@ -597,13 +605,11 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
       </div>
 
       <AuthDialog open={showAuth} onOpenChange={setShowAuth} />
+      
       <JobDetailModal
         job={selectedJob}
         open={showJobDetail}
         onOpenChange={setShowJobDetail}
-        isExported={selectedJob ? exportedJobIds.has(selectedJob.id) : false}
-        isStale={selectedJob ? isJobStale(selectedJob) : false}
-        duplicateCount={selectedJob?.duplicateCount}
       />
     </>
   );

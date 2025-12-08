@@ -23,7 +23,7 @@ interface JobSearchProps {
 }
 
 export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
-  const { user, subscriptionTier } = useAuth();
+  const { user, session, subscriptionTier } = useAuth();
   const [scraping, setScraping] = useState(false);
   const [selectedBoards, setSelectedBoards] = useState<Set<string>>(
     new Set(["We Work Remotely"])
@@ -33,6 +33,9 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [experienceLevel, setExperienceLevel] = useState("any");
   const [benefits, setBenefits] = useState("any");
+
+  const isPro = subscriptionTier === "pro";
+  const maxBoards = isPro ? 4 : 2;
 
   useEffect(() => {
     const count = parseInt(localStorage.getItem("anonymousScrapeCount") || "0");
@@ -51,10 +54,12 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
     if (newSelected.has(boardName)) {
       newSelected.delete(boardName);
     } else {
-      if (subscriptionTier === "free" && newSelected.size >= 2) {
+      if (newSelected.size >= maxBoards) {
         toast({
           title: "Board limit reached",
-          description: "Free plan users can select up to 2 boards. Upgrade to Pro for unlimited boards.",
+          description: isPro 
+            ? "Pro plan users can select up to 4 boards."
+            : "Free plan users can select up to 2 boards. Upgrade to Pro for up to 4 boards.",
           variant: "destructive",
         });
         return;
@@ -90,7 +95,14 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
     try {
       const boardsArray = Array.from(selectedBoards);
       
+      // Include auth header if user is logged in
+      const headers: Record<string, string> = {};
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
+      
       const { data, error } = await supabase.functions.invoke("scrape-jobs", {
+        headers,
         body: { 
           boards: boardsArray,
           searchQuery: searchQuery.trim() || undefined,
@@ -100,6 +112,16 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
       });
       
       if (error) throw error;
+      
+      // Check for board limit error
+      if (data?.code === "BOARD_LIMIT_EXCEEDED") {
+        toast({
+          title: "Board limit exceeded",
+          description: data.error,
+          variant: "destructive",
+        });
+        return;
+      }
       
       if (!user) {
         const newCount = scrapeCount + 1;
@@ -145,6 +167,11 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
         {!user && scrapeCount > 0 && scrapeCount < 2 && (
           <p className="text-xs text-muted-foreground mt-2">
             Anonymous scrapes remaining: {2 - scrapeCount}
+          </p>
+        )}
+        {user && (
+          <p className="text-xs text-muted-foreground mt-2">
+            {isPro ? "Pro: Up to 4 boards" : "Free: Up to 2 boards (Upgrade for more)"}
           </p>
         )}
       </div>

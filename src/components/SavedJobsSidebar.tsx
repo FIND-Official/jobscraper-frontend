@@ -389,8 +389,19 @@ export const SavedJobsSidebar = () => {
   };
 
   const handleExport = async () => {
-    const jobsToExportCount = savedJobs.length;
+    // Only export selected jobs
+    if (selectedJobs.size === 0) {
+      toast({
+        title: "No jobs selected",
+        description: "Please select jobs to export",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const jobsToExportCount = selectedJobs.size;
     
+    // Only check export limits for free users
     if (subscriptionTier === "free" && (monthlyExportCount + jobsToExportCount) > FREE_EXPORT_LIMIT) {
       const remaining = FREE_EXPORT_LIMIT - monthlyExportCount;
       toast({
@@ -417,10 +428,14 @@ export const SavedJobsSidebar = () => {
         return;
       }
 
+      // Pass selected job IDs to the export function
+      const selectedJobIdsArray = Array.from(selectedJobs);
+      
       const { data, error } = await supabase.functions.invoke("export-saved-jobs", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        body: { jobIds: selectedJobIdsArray },
       });
 
       if (error) {
@@ -450,7 +465,10 @@ export const SavedJobsSidebar = () => {
           .eq("id", user.id);
       }
 
-      const exportedIds = savedJobs.map(job => job.job_id);
+      // Track exported job IDs
+      const exportedIds = savedJobs
+        .filter(job => selectedJobs.has(job.id))
+        .map(job => job.job_id);
       const existingExported = JSON.parse(localStorage.getItem(`exportedJobs_${user?.id}`) || "[]");
       const updatedExported = [...new Set([...existingExported, ...exportedIds])];
       localStorage.setItem(`exportedJobs_${user?.id}`, JSON.stringify(updatedExported));
@@ -458,8 +476,12 @@ export const SavedJobsSidebar = () => {
 
       toast({
         title: "Export successful",
-        description: "Your saved jobs have been exported",
+        description: `${jobsToExportCount} job(s) have been exported`,
       });
+      
+      // Clear selection after export
+      setSelectedJobs(new Set());
+      setSelectAll(false);
     } catch (error: any) {
       toast({
         title: "Export failed",
@@ -488,6 +510,8 @@ export const SavedJobsSidebar = () => {
   }, {});
 
   const remainingExports = FREE_EXPORT_LIMIT - monthlyExportCount;
+  const isPro = subscriptionTier === "pro";
+  const hasSelectedJobs = selectedJobs.size > 0;
 
   return (
     <>
@@ -495,7 +519,7 @@ export const SavedJobsSidebar = () => {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Saved Jobs</h2>
           <div className="flex items-center gap-2">
-            {user && subscriptionTier === "free" && (
+            {user && !isPro && (
               <span className="text-xs text-muted-foreground">
                 {remainingExports}/{FREE_EXPORT_LIMIT}
               </span>
@@ -504,10 +528,11 @@ export const SavedJobsSidebar = () => {
               size="sm"
               variant="outline"
               onClick={handleExport}
-              disabled={savedJobs.length === 0}
+              disabled={!hasSelectedJobs}
+              title={!hasSelectedJobs ? "Select jobs to export" : `Export ${selectedJobs.size} selected job(s)`}
             >
               <Download className="h-4 w-4 mr-1" />
-              Export
+              Export {hasSelectedJobs && `(${selectedJobs.size})`}
             </Button>
           </div>
         </div>
@@ -520,7 +545,7 @@ export const SavedJobsSidebar = () => {
             className="w-full mb-3"
           >
             <CreditCard className="h-4 w-4 mr-2" />
-            Pricing
+            {isPro ? "Manage Subscription" : "Upgrade to Pro"}
           </Button>
         )}
 
