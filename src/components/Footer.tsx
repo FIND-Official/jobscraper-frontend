@@ -38,6 +38,14 @@ export const Footer = () => {
               >
                 Help
               </button>
+              <a
+                href="https://find.canny.io/help-us-improve"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-primary transition-colors"
+              >
+                Feedback
+              </a>
               <Link to="/terms-and-privacy" className="text-muted-foreground hover:text-primary transition-colors">
                 Privacy
               </Link>
