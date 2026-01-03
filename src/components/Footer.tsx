@@ -1,11 +1,9 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useState } from "react";
 import { ContactDialog } from "./ContactDialog";
-import { PricingDialog } from "./PricingDialog";
 
 export const Footer = () => {
   const [showContact, setShowContact] = useState(false);
-  const [showPricing, setShowPricing] = useState(false);
 
   return (
     <>
@@ -17,13 +15,7 @@ export const Footer = () => {
               <div>© 2025 JobScraper. All rights reserved.</div>
             </div>
             
-            <div className="flex gap-6 text-sm">
-              <button
-                onClick={() => setShowPricing(true)}
-                className="text-muted-foreground hover:text-primary transition-colors"
-              >
-                Pricing
-              </button>
+            <div className="flex flex-wrap justify-center gap-4 sm:gap-6 text-sm">
               <a
                 href="https://forms.gle/tEWwQv6YcmtmTKqB9"
                 target="_blank"
@@ -58,7 +50,6 @@ export const Footer = () => {
       </footer>
 
       <ContactDialog open={showContact} onOpenChange={setShowContact} />
-      <PricingDialog open={showPricing} onOpenChange={setShowPricing} />
     </>
   );
 };

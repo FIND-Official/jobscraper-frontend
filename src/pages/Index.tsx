@@ -4,6 +4,7 @@ import { Footer } from "@/components/Footer";
 import { JobSearch } from "@/components/JobSearch";
 import { JobList } from "@/components/JobList";
 import { SavedJobsSidebar } from "@/components/SavedJobsSidebar";
+import { OnboardingTour } from "@/components/OnboardingTour";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 
@@ -19,6 +20,19 @@ const Index = () => {
   const { checkSubscription, user } = useAuth();
   const [scrapeSessions, setScrapeSessions] = useState<ScrapeSession[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Check if onboarding should be shown
+  useEffect(() => {
+    const hasCompletedOnboarding = localStorage.getItem("onboardingCompleted");
+    if (!hasCompletedOnboarding) {
+      // Small delay to let the page render first
+      const timer = setTimeout(() => {
+        setShowOnboarding(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   // Handle Stripe redirect with success param
   useEffect(() => {
@@ -60,6 +74,10 @@ const Index = () => {
     setScrapeSessions([]);
   }, []);
 
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -80,6 +98,10 @@ const Index = () => {
 
       <SavedJobsSidebar />
       <Footer />
+
+      {showOnboarding && (
+        <OnboardingTour onComplete={handleOnboardingComplete} />
+      )}
     </div>
   );
 };
