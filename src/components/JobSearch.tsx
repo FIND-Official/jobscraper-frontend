@@ -9,6 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthDialog } from "./AuthDialog";
+import { JobBoardTooltip } from "./JobBoardTooltip";
+import { SavedSearchTags } from "./SavedSearchTags";
 
 interface ScrapeResult {
   id: string;
@@ -22,6 +24,8 @@ interface JobSearchProps {
   onScrapeComplete?: (result: ScrapeResult) => void;
 }
 
+const MAX_SAVED_SEARCHES = 5;
+
 export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
   const { user, session, subscriptionTier } = useAuth();
   const [scraping, setScraping] = useState(false);
@@ -32,7 +36,7 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [experienceLevel, setExperienceLevel] = useState("any");
-  const [benefits, setBenefits] = useState("any");
+  const [savedSearches, setSavedSearches] = useState<string[]>([]);
 
   const isPro = subscriptionTier === "pro";
   const maxBoards = isPro ? 4 : 2;
@@ -40,6 +44,12 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
   useEffect(() => {
     const count = parseInt(localStorage.getItem("anonymousScrapeCount") || "0");
     setScrapeCount(count);
+    
+    // Load saved searches from localStorage
+    const saved = localStorage.getItem("savedSearches");
+    if (saved) {
+      setSavedSearches(JSON.parse(saved));
+    }
   }, []);
 
   const jobBoards = [
@@ -69,6 +79,27 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
     setSelectedBoards(newSelected);
   };
 
+  const saveSearch = (query: string) => {
+    if (!query.trim()) return;
+    
+    const normalizedQuery = query.trim();
+    if (savedSearches.includes(normalizedQuery)) return;
+    
+    const newSearches = [normalizedQuery, ...savedSearches].slice(0, MAX_SAVED_SEARCHES);
+    setSavedSearches(newSearches);
+    localStorage.setItem("savedSearches", JSON.stringify(newSearches));
+  };
+
+  const removeSearch = (search: string) => {
+    const newSearches = savedSearches.filter((s) => s !== search);
+    setSavedSearches(newSearches);
+    localStorage.setItem("savedSearches", JSON.stringify(newSearches));
+  };
+
+  const selectSearch = (search: string) => {
+    setSearchQuery(search);
+  };
+
   const handleScrape = async () => {
     if (!user) {
       if (scrapeCount >= 2) {
@@ -91,6 +122,11 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
       return;
     }
 
+    // Save the search query if it's not empty
+    if (searchQuery.trim()) {
+      saveSearch(searchQuery.trim());
+    }
+
     setScraping(true);
     try {
       const boardsArray = Array.from(selectedBoards);
@@ -107,7 +143,6 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
           boards: boardsArray,
           searchQuery: searchQuery.trim() || undefined,
           experienceLevel: experienceLevel !== "any" ? experienceLevel : undefined,
-          benefits: benefits !== "any" ? benefits : undefined,
         }
       });
       
@@ -193,12 +228,13 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
                 <Label htmlFor={board.id} className="cursor-pointer flex-1 text-sm">
                   {board.name}
                 </Label>
+                <JobBoardTooltip boardName={board.name} />
               </div>
             ))}
           </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-2 gap-4">
           <div>
             <Label className="text-sm mb-2 block">Search</Label>
             <Input 
@@ -206,6 +242,11 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
               className="bg-card"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleScrape();
+                }
+              }}
             />
           </div>
           <div>
@@ -222,21 +263,13 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label className="text-sm mb-2 block">Benefits</Label>
-            <Select value={benefits} onValueChange={setBenefits}>
-              <SelectTrigger className="bg-card">
-                <SelectValue placeholder="Any Benefits" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Any Benefits</SelectItem>
-                <SelectItem value="health">Health Insurance</SelectItem>
-                <SelectItem value="401k">401(k)</SelectItem>
-                <SelectItem value="pto">Unlimited PTO</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
+
+        <SavedSearchTags 
+          savedSearches={savedSearches}
+          onRemove={removeSearch}
+          onSelect={selectSearch}
+        />
 
         <Button
           onClick={handleScrape}
