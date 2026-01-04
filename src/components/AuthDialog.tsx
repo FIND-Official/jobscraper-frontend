@@ -16,6 +16,7 @@ export const AuthDialog = ({ open, onOpenChange }: AuthDialogProps) => {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const { signUp, signIn } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -24,13 +25,14 @@ export const AuthDialog = ({ open, onOpenChange }: AuthDialogProps) => {
 
     try {
       if (isSignUp) {
-        await signUp(email, password);
+        await signUp(email, password, fullName);
       } else {
         await signIn(email, password);
       }
       onOpenChange(false);
       setEmail("");
       setPassword("");
+      setFullName("");
     } catch (error: any) {
       toast({
         title: "Error",
@@ -49,6 +51,19 @@ export const AuthDialog = ({ open, onOpenChange }: AuthDialogProps) => {
           <DialogTitle>{isSignUp ? "Create Account" : "Sign In"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {isSignUp && (
+            <div>
+              <Label htmlFor="fullName">Full Name</Label>
+              <Input
+                id="fullName"
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+                placeholder="John Doe"
+              />
+            </div>
+          )}
           <div>
             <Label htmlFor="email">Email</Label>
             <Input
