@@ -540,17 +540,6 @@ export const SavedJobsSidebar = () => {
         </div>
       </div>
 
-      {user && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowPricing(true)}
-          className="w-full mb-3"
-        >
-          <CreditCard className="h-4 w-4 mr-2" />
-          {isPro ? "Manage Subscription" : "Upgrade to Pro"}
-        </Button>
-      )}
 
       {!user ? (
         <p className="text-sm text-muted-foreground">Sign in to save jobs</p>
