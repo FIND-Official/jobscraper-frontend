@@ -20,3 +20,6 @@ verify_jwt = true
 
 [functions.parse-job-ai]
 verify_jwt = true
+
+[functions.mailchimp-sync]
+verify_jwt = false
