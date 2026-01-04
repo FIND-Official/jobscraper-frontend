@@ -9,7 +9,7 @@ interface AuthContextType {
   loading: boolean;
   subscriptionTier: "free" | "pro";
   subscriptionEnd: string | null;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   checkSubscription: () => Promise<void>;
@@ -123,13 +123,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => clearInterval(interval);
   }, [session, checkSubscription]);
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, fullName?: string) => {
     const redirectUrl = `${window.location.origin}/`;
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: redirectUrl,
+        data: {
+          full_name: fullName || "",
+        },
       },
     });
 
