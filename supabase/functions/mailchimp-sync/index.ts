@@ -1,4 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { crypto } from "https://deno.land/std@0.190.0/crypto/mod.ts";
+import { encode } from "https://deno.land/std@0.190.0/encoding/hex.ts";
+
+// Helper to convert Uint8Array to hex string
+function toHex(bytes: Uint8Array): string {
+  return new TextDecoder().decode(encode(bytes));
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,11 +18,10 @@ interface MailchimpSyncRequest {
 }
 
 // MD5 hash function for Mailchimp subscriber hash
-async function md5(message: string): Promise<string> {
-  const msgBuffer = new TextEncoder().encode(message);
-  const hashBuffer = await crypto.subtle.digest("MD5", msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+function md5(message: string): string {
+  const msgBuffer = new TextEncoder().encode(message.toLowerCase());
+  const hashBuffer = crypto.subtle.digestSync("MD5", msgBuffer);
+  return toHex(new Uint8Array(hashBuffer));
 }
 
 serve(async (req: Request): Promise<Response> => {
@@ -54,7 +60,7 @@ serve(async (req: Request): Promise<Response> => {
     console.log(`[MAILCHIMP] Syncing user: ${email}`);
 
     // Create MD5 hash of lowercase email for subscriber hash
-    const subscriberHash = await md5(email.toLowerCase());
+    const subscriberHash = md5(email);
     const baseUrl = `https://${dataCenter}.api.mailchimp.com/3.0`;
 
     // Split full name into first and last name
