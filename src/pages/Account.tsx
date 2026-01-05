@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { DateRange } from "react-day-picker";
+import NotificationPreferences from "@/components/NotificationPreferences";
 
 interface JobBoardStats {
   [key: string]: number;
@@ -391,6 +392,11 @@ const Account = () => {
                 )}
               </CardContent>
             </Card>
+
+            {/* Email Notification Preferences */}
+            <div className="md:col-span-2">
+              <NotificationPreferences />
+            </div>
           </div>
         )}
       </main>
