@@ -23,3 +23,6 @@ verify_jwt = true
 
 [functions.mailchimp-sync]
 verify_jwt = false
+
+[functions.job-alerts]
+verify_jwt = false
