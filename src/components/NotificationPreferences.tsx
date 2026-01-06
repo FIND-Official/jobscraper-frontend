@@ -8,9 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Bell, Loader2, Mail, Save } from "lucide-react";
+import { Bell, Loader2, Mail, Save, Send } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-
 interface NotificationPreference {
   id?: string;
   user_id: string;
@@ -32,6 +31,7 @@ const NotificationPreferences = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [preferences, setPreferences] = useState<NotificationPreference>({
     user_id: user?.id || "",
     enabled: false,
@@ -143,6 +143,52 @@ const NotificationPreferences = () => {
         ? [...prev.job_boards, boardId]
         : prev.job_boards.filter(id => id !== boardId),
     }));
+  };
+
+  const handleTestAlert = async () => {
+    if (!user || !preferences.id) {
+      toast({
+        title: "Save preferences first",
+        description: "Please save your notification preferences before testing.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setTesting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("job-alerts", {
+        body: { test: true, user_id: user.id },
+      });
+
+      if (error) throw error;
+
+      if (data?.emailsSent > 0) {
+        toast({
+          title: "Test email sent!",
+          description: `Check your inbox for ${data.emailsSent} job alert email.`,
+        });
+      } else if (data?.details?.length > 0) {
+        toast({
+          title: "No jobs to send",
+          description: data.details[0] || "No new jobs matching your preferences.",
+        });
+      } else {
+        toast({
+          title: "Alert processed",
+          description: data?.message || "Check your email inbox.",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error testing alert:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send test alert",
+        variant: "destructive",
+      });
+    } finally {
+      setTesting(false);
+    }
   };
 
   if (loading) {
@@ -281,14 +327,31 @@ const NotificationPreferences = () => {
         )}
 
         {/* Save Button */}
-        <Button onClick={handleSave} disabled={saving} className="w-full">
-          {saving ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4 mr-2" />
+        <div className="flex gap-2">
+          <Button onClick={handleSave} disabled={saving} className="flex-1">
+            {saving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save Preferences
+          </Button>
+          {preferences.enabled && preferences.id && (
+            <Button 
+              onClick={handleTestAlert} 
+              disabled={testing} 
+              variant="outline"
+              className="flex-1"
+            >
+              {testing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              Send Test Alert
+            </Button>
           )}
-          Save Preferences
-        </Button>
+        </div>
       </CardContent>
     </Card>
   );
