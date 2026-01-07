@@ -80,13 +80,8 @@ function shouldSendAlert(preference: NotificationPreference, forceTest: boolean 
   return hoursSinceLastSent >= frequencyHours;
 }
 
-async function sendJobAlertEmail(
-  email: string,
-  jobs: Job[],
-  keyword: string | null,
-  resendApiKey: string
-): Promise<boolean> {
-  // Create email content
+// Build email HTML content
+function buildEmailHtml(jobs: Job[], keyword: string | null): string {
   const jobListHtml = jobs.slice(0, 10).map(job => `
     <tr>
       <td style="padding: 15px; border-bottom: 1px solid #eee;">
@@ -101,7 +96,7 @@ async function sendJobAlertEmail(
   const searchDesc = keyword ? `for "${keyword}"` : '';
   const appUrl = "https://ydvmulhmmragakuimuqm.lovableproject.com";
   
-  const emailHtml = `
+  return `
     <!DOCTYPE html>
     <html>
     <head>
@@ -135,35 +130,185 @@ async function sendJobAlertEmail(
     </body>
     </html>
   `;
+}
 
+// Send job alert email using Mailchimp Marketing API (campaign)
+async function sendJobAlertViaMailchimp(
+  email: string,
+  jobs: Job[],
+  keyword: string | null,
+  mailchimpApiKey: string,
+  audienceId: string
+): Promise<boolean> {
   try {
-    console.log(`[JOB-ALERTS] Sending email to ${email} with ${jobs.length} jobs...`);
-    
-    const resendResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
+    const dataCenter = mailchimpApiKey.split("-").pop();
+    if (!dataCenter) {
+      console.error("[JOB-ALERTS] Invalid Mailchimp API key format");
+      return false;
+    }
+
+    const baseUrl = `https://${dataCenter}.api.mailchimp.com/3.0`;
+    const authHeader = "Basic " + btoa(`anystring:${mailchimpApiKey}`);
+    const subscriberHash = md5(email);
+
+    console.log(`[JOB-ALERTS] Preparing Mailchimp campaign for ${email} with ${jobs.length} jobs...`);
+
+    // Step 1: Ensure user is subscribed to the audience
+    const memberUrl = `${baseUrl}/lists/${audienceId}/members/${subscriberHash}`;
+    const memberResponse = await fetch(memberUrl, {
+      method: "PUT",
       headers: {
-        "Authorization": `Bearer ${resendApiKey}`,
+        "Authorization": authHeader,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "JobScraper Alerts <onboarding@resend.dev>",
-        to: email,
-        subject: `🔍 ${jobs.length} New Remote Jobs ${searchDesc}`.trim(),
+        email_address: email,
+        status_if_new: "subscribed",
+        merge_fields: {},
+      }),
+    });
+
+    if (!memberResponse.ok) {
+      const memberError = await memberResponse.json();
+      console.error("[JOB-ALERTS] Failed to add/update member:", memberError);
+      // Continue anyway - member might already exist
+    } else {
+      console.log(`[JOB-ALERTS] Member ${email} ensured in audience`);
+    }
+
+    // Step 2: Create a segment for this specific user
+    const segmentName = `JobAlert_${subscriberHash}_${Date.now()}`;
+    const segmentUrl = `${baseUrl}/lists/${audienceId}/segments`;
+    
+    const segmentResponse = await fetch(segmentUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: segmentName,
+        static_segment: [email],
+      }),
+    });
+
+    if (!segmentResponse.ok) {
+      const segmentError = await segmentResponse.json();
+      console.error("[JOB-ALERTS] Failed to create segment:", segmentError);
+      return false;
+    }
+
+    const segmentData = await segmentResponse.json();
+    const segmentId = segmentData.id;
+    console.log(`[JOB-ALERTS] Created segment ${segmentId} for ${email}`);
+
+    // Step 3: Get audience details for default from settings
+    const audienceDetailsUrl = `${baseUrl}/lists/${audienceId}`;
+    const audienceResponse = await fetch(audienceDetailsUrl, {
+      headers: { "Authorization": authHeader },
+    });
+    
+    let fromEmail = email; // fallback to user's email
+    let fromName = "JobScraper Alerts";
+    
+    if (audienceResponse.ok) {
+      const audienceData = await audienceResponse.json();
+      if (audienceData.campaign_defaults?.from_email) {
+        fromEmail = audienceData.campaign_defaults.from_email;
+      }
+      if (audienceData.campaign_defaults?.from_name) {
+        fromName = audienceData.campaign_defaults.from_name;
+      }
+    }
+
+    // Step 4: Create a campaign targeting this segment
+    const searchDesc = keyword ? ` for "${keyword}"` : '';
+    const campaignUrl = `${baseUrl}/campaigns`;
+    
+    const campaignResponse = await fetch(campaignUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        type: "regular",
+        recipients: {
+          list_id: audienceId,
+          segment_opts: {
+            saved_segment_id: segmentId,
+          },
+        },
+        settings: {
+          subject_line: `🔍 ${jobs.length} New Remote Jobs${searchDesc}`,
+          title: `Job Alert - ${new Date().toISOString().split('T')[0]}`,
+          from_name: fromName,
+          reply_to: fromEmail,
+        },
+      }),
+    });
+
+    if (!campaignResponse.ok) {
+      const campaignError = await campaignResponse.json();
+      console.error("[JOB-ALERTS] Failed to create campaign:", campaignError);
+      return false;
+    }
+
+    const campaignData = await campaignResponse.json();
+    const campaignId = campaignData.id;
+    console.log(`[JOB-ALERTS] Created campaign ${campaignId}`);
+
+    // Step 4: Set campaign content
+    const contentUrl = `${baseUrl}/campaigns/${campaignId}/content`;
+    const emailHtml = buildEmailHtml(jobs, keyword);
+    
+    const contentResponse = await fetch(contentUrl, {
+      method: "PUT",
+      headers: {
+        "Authorization": authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
         html: emailHtml,
       }),
     });
 
-    const responseData = await resendResponse.json();
-    
-    if (!resendResponse.ok) {
-      console.error("[JOB-ALERTS] Resend email failed:", JSON.stringify(responseData));
+    if (!contentResponse.ok) {
+      const contentError = await contentResponse.json();
+      console.error("[JOB-ALERTS] Failed to set campaign content:", contentError);
       return false;
     }
 
-    console.log(`[JOB-ALERTS] Email sent successfully to ${email}:`, JSON.stringify(responseData));
+    console.log(`[JOB-ALERTS] Campaign content set`);
+
+    // Step 5: Send the campaign
+    const sendUrl = `${baseUrl}/campaigns/${campaignId}/actions/send`;
+    
+    const sendResponse = await fetch(sendUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": authHeader,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!sendResponse.ok) {
+      const sendError = await sendResponse.json();
+      console.error("[JOB-ALERTS] Failed to send campaign:", sendError);
+      return false;
+    }
+
+    console.log(`[JOB-ALERTS] Campaign sent successfully to ${email}`);
+
+    // Step 6: Clean up - delete the temporary segment (async, don't wait)
+    fetch(`${segmentUrl}/${segmentId}`, {
+      method: "DELETE",
+      headers: { "Authorization": authHeader },
+    }).catch(() => {});
+
     return true;
   } catch (error) {
-    console.error("[JOB-ALERTS] Error sending email:", error);
+    console.error("[JOB-ALERTS] Mailchimp error:", error);
     return false;
   }
 }
@@ -197,12 +342,15 @@ serve(async (req: Request): Promise<Response> => {
     
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const mailchimpApiKey = Deno.env.get("MAILCHIMP_API_KEY");
     
-    if (!resendApiKey) {
-      console.error("[JOB-ALERTS] RESEND_API_KEY not configured");
-      throw new Error("RESEND_API_KEY not configured");
+    if (!mailchimpApiKey) {
+      console.error("[JOB-ALERTS] MAILCHIMP_API_KEY not configured");
+      throw new Error("MAILCHIMP_API_KEY not configured");
     }
+
+    // Mailchimp audience ID - this should be your existing audience
+    const audienceId = "0b7157eb3f";
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -315,12 +463,13 @@ serve(async (req: Request): Promise<Response> => {
 
       console.log(`[JOB-ALERTS] Found ${jobs.length} jobs for ${profile.email}`);
 
-      // Send email
-      const sent = await sendJobAlertEmail(
+      // Send email via Mailchimp
+      const sent = await sendJobAlertViaMailchimp(
         profile.email,
         jobs as Job[],
         pref.search_keyword,
-        resendApiKey
+        mailchimpApiKey,
+        audienceId
       );
 
       if (sent) {
