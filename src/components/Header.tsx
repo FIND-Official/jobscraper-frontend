@@ -15,9 +15,9 @@ export const Header = () => {
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold">
+          <a href="https://find-jobscraper.vercel.app/" className="text-xl font-bold hover:opacity-80 transition-opacity">
             Job<span className="text-primary">Scraper</span>
-          </h1>
+          </a>
           
           <Button
             variant="ghost"
