@@ -17,6 +17,14 @@ export const Footer = () => {
             
             <div className="flex flex-wrap justify-center gap-4 sm:gap-6 text-sm">
               <a
+                href="https://www.trustpilot.com/review/wefind.space"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-primary transition-colors"
+              >
+                Leave Us A Review
+              </a>
+              <a
                 href="https://forms.gle/tEWwQv6YcmtmTKqB9"
                 target="_blank"
                 rel="noopener noreferrer"
