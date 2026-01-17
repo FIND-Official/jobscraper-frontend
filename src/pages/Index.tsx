@@ -82,19 +82,20 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <Header />
       
-      <main className="container mx-auto px-4 pt-24 pb-32 pr-4 lg:pr-80">
-        <div className="max-w-5xl">
-          <JobSearch onScrapeComplete={handleScrapeComplete} />
-          
-          <div className="mt-12">
-            <JobList 
-              scrapeSessions={scrapeSessions} 
-              onClearSessions={handleClearSessions}
-              refreshTrigger={refreshTrigger}
-            />
-          </div>
+      <main className="container mx-auto px-4 pt-24 pb-32 lg:pr-96 lg:pl-4">
+      <div className="max-w-5xl mx-auto lg:mx-0">
+        <JobSearch onScrapeComplete={handleScrapeComplete} />
+
+        <div className="mt-12">
+          <JobList
+            scrapeSessions={scrapeSessions}
+            onClearSessions={handleClearSessions}
+            refreshTrigger={refreshTrigger}
+          />
         </div>
-      </main>
+      </div>
+    </main>
+
 
       <SavedJobsSidebar />
       <Footer />
