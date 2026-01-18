@@ -9,7 +9,7 @@ interface AuthContextType {
   loading: boolean;
   subscriptionTier: "free" | "pro";
   subscriptionEnd: string | null;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   checkSubscription: () => Promise<void>;
@@ -123,17 +123,39 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => clearInterval(interval);
   }, [session, checkSubscription]);
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, fullName?: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    const { error } = await supabase.auth.signUp({
+    const { error, data } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: redirectUrl,
+        data: {
+          full_name: fullName || "",
+        },
       },
     });
 
     if (error) throw error;
+
+    // Sync user to Mailchimp (fire and forget - don't block signup)
+    if (data.user) {
+      supabase.functions.invoke("mailchimp-sync", {
+        body: {
+          email: email,
+          fullName: fullName || "",
+        },
+      }).then((result) => {
+        if (result.error) {
+          console.error("[AUTH] Mailchimp sync failed:", result.error);
+        } else {
+          console.log("[AUTH] Mailchimp sync successful");
+        }
+      }).catch((err) => {
+        console.error("[AUTH] Mailchimp sync error:", err);
+      });
+    }
+
     toast({
       title: "Success",
       description: "Account created successfully!",

@@ -8,7 +8,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ExternalLink, MapPin, Briefcase, Building2, Calendar, Sparkles, Loader2 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ExternalLink, MapPin, Briefcase, Building2, Calendar, Sparkles, Loader2, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -62,6 +67,7 @@ export const JobDetailModal = ({
   if (!job) return null;
 
   const cleanDescription = job.description?.replace(/<[^>]*>/g, "") || "";
+  const isPro = subscriptionTier === "pro";
   
   // Parse description sections (basic parsing for non-Pro users)
   const parseDescription = (desc: string) => {
@@ -189,14 +195,30 @@ export const JobDetailModal = ({
                   </Badge>
                 )}
                 {isStale && (
-                  <Badge variant="outline" className="text-yellow-600 border-yellow-600 bg-yellow-50">
-                    Potentially old job
-                  </Badge>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="text-yellow-600 border-yellow-600 bg-yellow-50 cursor-help">
+                        Potentially old job
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Jobs older than 14 days may be closed</p>
+                    </TooltipContent>
+                  </Tooltip>
                 )}
                 {duplicateCount && duplicateCount > 0 && (
-                  <Badge variant="outline" className="text-blue-600 border-blue-600 bg-blue-50">
-                    {duplicateCount} duplicates merged
-                  </Badge>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="text-blue-600 border-blue-600 bg-blue-50 cursor-help">
+                        {duplicateCount} duplicates merged
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs max-w-[200px]">
+                        This job was posted on multiple boards. We merged them to avoid showing duplicates.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </div>
               
@@ -226,30 +248,50 @@ export const JobDetailModal = ({
           </div>
         </DialogHeader>
 
-        {/* AI Parse Button - Only for Pro users */}
-        {subscriptionTier === "pro" && !parsedJob && (
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleAIParse}
-              disabled={isParsing}
-              className="text-purple-600 border-purple-600 hover:bg-purple-50"
-            >
-              {isParsing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Parsing...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2" />
+        {/* AI Parse Button */}
+        <div className="flex justify-end">
+          {isPro ? (
+            !parsedJob && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAIParse}
+                disabled={isParsing}
+                className="text-purple-600 border-purple-600 hover:bg-purple-50"
+              >
+                {isParsing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Parsing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Parse with AI
+                  </>
+                )}
+              </Button>
+            )
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  className="text-muted-foreground border-muted-foreground/30 cursor-not-allowed"
+                >
+                  <Lock className="h-4 w-4 mr-2" />
                   Parse with AI
-                </>
-              )}
-            </Button>
-          </div>
-        )}
+                  <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">PRO</Badge>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">Upgrade to Pro to use AI-powered job parsing</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
 
         <Separator className="my-4" />
 

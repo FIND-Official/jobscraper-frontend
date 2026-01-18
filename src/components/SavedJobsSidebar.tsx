@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Download, Trash2, CreditCard, Archive, ArchiveRestore } from "lucide-react";
+import { Download, Trash2, CreditCard, Archive, ArchiveRestore, X, Bookmark } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { PricingDialog } from "./PricingDialog";
 import { format } from "date-fns";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface SavedJob {
   id: string;
@@ -43,6 +45,7 @@ interface GroupedJobs<T> {
 
 export const SavedJobsSidebar = () => {
   const { user, subscriptionTier } = useAuth();
+  const isMobile = useIsMobile();
   const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
   const [archivedJobs, setArchivedJobs] = useState<ArchivedJob[]>([]);
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
@@ -54,6 +57,7 @@ export const SavedJobsSidebar = () => {
   const [monthlyExportCount, setMonthlyExportCount] = useState(0);
   const [exportedJobIds, setExportedJobIds] = useState<ExportedJobsMap>({});
   const [activeTab, setActiveTab] = useState("saved");
+  const [isOpen, setIsOpen] = useState(false);
 
   const FREE_EXPORT_LIMIT = 50;
 
@@ -389,8 +393,19 @@ export const SavedJobsSidebar = () => {
   };
 
   const handleExport = async () => {
-    const jobsToExportCount = savedJobs.length;
+    // Only export selected jobs
+    if (selectedJobs.size === 0) {
+      toast({
+        title: "No jobs selected",
+        description: "Please select jobs to export",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const jobsToExportCount = selectedJobs.size;
     
+    // Only check export limits for free users
     if (subscriptionTier === "free" && (monthlyExportCount + jobsToExportCount) > FREE_EXPORT_LIMIT) {
       const remaining = FREE_EXPORT_LIMIT - monthlyExportCount;
       toast({
@@ -417,10 +432,14 @@ export const SavedJobsSidebar = () => {
         return;
       }
 
+      // Pass selected job IDs to the export function
+      const selectedJobIdsArray = Array.from(selectedJobs);
+      
       const { data, error } = await supabase.functions.invoke("export-saved-jobs", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        body: { jobIds: selectedJobIdsArray },
       });
 
       if (error) {
@@ -450,7 +469,10 @@ export const SavedJobsSidebar = () => {
           .eq("id", user.id);
       }
 
-      const exportedIds = savedJobs.map(job => job.job_id);
+      // Track exported job IDs
+      const exportedIds = savedJobs
+        .filter(job => selectedJobs.has(job.id))
+        .map(job => job.job_id);
       const existingExported = JSON.parse(localStorage.getItem(`exportedJobs_${user?.id}`) || "[]");
       const updatedExported = [...new Set([...existingExported, ...exportedIds])];
       localStorage.setItem(`exportedJobs_${user?.id}`, JSON.stringify(updatedExported));
@@ -458,8 +480,12 @@ export const SavedJobsSidebar = () => {
 
       toast({
         title: "Export successful",
-        description: "Your saved jobs have been exported",
+        description: `${jobsToExportCount} job(s) have been exported`,
       });
+      
+      // Clear selection after export
+      setSelectedJobs(new Set());
+      setSelectAll(false);
     } catch (error: any) {
       toast({
         title: "Export failed",
@@ -488,189 +514,218 @@ export const SavedJobsSidebar = () => {
   }, {});
 
   const remainingExports = FREE_EXPORT_LIMIT - monthlyExportCount;
+  const isPro = subscriptionTier === "pro";
+  const hasSelectedJobs = selectedJobs.size > 0;
 
-  return (
+  const sidebarContent = (
     <>
-      <div className="fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-card border-l border-border p-4 overflow-y-auto">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Jobs</h2>
-          <div className="flex items-center gap-2">
-            {user && subscriptionTier === "free" && (
-              <span className="text-xs text-muted-foreground">
-                {remainingExports}/{FREE_EXPORT_LIMIT}
-              </span>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleExport}
-              disabled={savedJobs.length === 0}
-            >
-              <Download className="h-4 w-4 mr-1" />
-              Export
-            </Button>
-          </div>
-        </div>
-
-        {user && (
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold">Saved Jobs</h2>
+        <div className="flex items-center gap-2">
+          {user && !isPro && (
+            <span className="text-xs text-muted-foreground">
+              {remainingExports}/{FREE_EXPORT_LIMIT}
+            </span>
+          )}
           <Button
-            variant="outline"
             size="sm"
-            onClick={() => setShowPricing(true)}
-            className="w-full mb-3"
+            variant="outline"
+            onClick={handleExport}
+            disabled={!hasSelectedJobs}
+            title={!hasSelectedJobs ? "Select jobs to export" : `Export ${selectedJobs.size} selected job(s)`}
           >
-            <CreditCard className="h-4 w-4 mr-2" />
-            Pricing
+            <Download className="h-4 w-4 mr-1" />
+            Export {hasSelectedJobs && `(${selectedJobs.size})`}
           </Button>
-        )}
+        </div>
+      </div>
 
-        {!user ? (
-          <p className="text-sm text-muted-foreground">Sign in to save jobs</p>
-        ) : loading ? (
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        ) : (
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-3">
-              <TabsTrigger value="saved" className="text-xs">
-                Saved ({savedJobs.length})
-              </TabsTrigger>
-              <TabsTrigger value="archived" className="text-xs">
-                Archived ({archivedJobs.length})
-              </TabsTrigger>
-            </TabsList>
 
-            <TabsContent value="saved" className="mt-0">
-              {savedJobs.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No saved jobs yet</p>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between pb-2 border-b border-border">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={selectAll}
-                        onCheckedChange={handleSelectAll}
-                      />
-                      <span className="text-xs text-muted-foreground">Select all</span>
-                    </div>
-                    {selectedJobs.size > 0 && (
-                      <div className="flex gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={handleArchiveSelected}
-                          className="h-7 text-xs"
-                        >
-                          <Archive className="h-3 w-3 mr-1" />
-                          Archive
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={handleDeleteSelected}
-                          className="h-7 text-xs text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    )}
+      {!user ? (
+        <p className="text-sm text-muted-foreground">Sign in to save jobs</p>
+      ) : loading ? (
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      ) : (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-3">
+            <TabsTrigger value="saved" className="text-xs">
+              Saved ({savedJobs.length})
+            </TabsTrigger>
+            <TabsTrigger value="archived" className="text-xs">
+              Archived ({archivedJobs.length})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="saved" className="mt-0">
+            {savedJobs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No saved jobs yet</p>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectAll}
+                      onCheckedChange={handleSelectAll}
+                    />
+                    <span className="text-xs text-muted-foreground">Select all</span>
                   </div>
-
-                  {Object.entries(groupedSavedJobs).map(([dateTime, jobs]) => (
-                    <div key={dateTime} className="space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        {dateTime}
-                      </p>
-                      {jobs.map((savedJob) => (
-                        <div key={savedJob.id} className="bg-secondary/50 rounded-lg p-2.5 space-y-1">
-                          <div className="flex items-start gap-2">
-                            <Checkbox
-                              checked={selectedJobs.has(savedJob.id)}
-                              onCheckedChange={() => handleToggle(savedJob.id)}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <h3 className="text-sm font-medium truncate">{savedJob.jobs.title}</h3>
-                                {exportedJobIds[savedJob.job_id] && (
-                                  <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full whitespace-nowrap">
-                                    Exported
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs text-muted-foreground truncate">{savedJob.jobs.company}</p>
-                            </div>
-                            <button
-                              onClick={() => handleDelete(savedJob.id)}
-                              className="text-muted-foreground hover:text-destructive transition-colors"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="archived" className="mt-0">
-              {archivedJobs.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No archived jobs</p>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between pb-2 border-b border-border">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={selectAllArchived}
-                        onCheckedChange={handleSelectAllArchived}
-                      />
-                      <span className="text-xs text-muted-foreground">Select all</span>
-                    </div>
-                    {selectedArchivedJobs.size > 0 && (
+                  {selectedJobs.size > 0 && (
+                    <div className="flex gap-1">
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={handleRestoreSelected}
+                        onClick={handleArchiveSelected}
                         className="h-7 text-xs"
                       >
-                        <ArchiveRestore className="h-3 w-3 mr-1" />
-                        Restore ({selectedArchivedJobs.size})
+                        <Archive className="h-3 w-3 mr-1" />
+                        Archive
                       </Button>
-                    )}
-                  </div>
-
-                  {Object.entries(groupedArchivedJobs).map(([dateTime, jobs]) => (
-                    <div key={dateTime} className="space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        {dateTime}
-                      </p>
-                      {jobs.map((archivedJob) => (
-                        <div key={archivedJob.id} className="bg-secondary/50 rounded-lg p-2.5 space-y-1">
-                          <div className="flex items-start gap-2">
-                            <Checkbox
-                              checked={selectedArchivedJobs.has(archivedJob.id)}
-                              onCheckedChange={() => handleToggleArchived(archivedJob.id)}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-sm font-medium truncate">{archivedJob.jobs.title}</h3>
-                              <p className="text-xs text-muted-foreground truncate">{archivedJob.jobs.company}</p>
-                            </div>
-                            <button
-                              onClick={() => handleDeleteArchived(archivedJob.id)}
-                              className="text-muted-foreground hover:text-destructive transition-colors"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleDeleteSelected}
+                        className="h-7 text-xs text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </div>
-                  ))}
+                  )}
                 </div>
+
+                {Object.entries(groupedSavedJobs).map(([dateTime, jobs]) => (
+                  <div key={dateTime} className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      {dateTime}
+                    </p>
+                    {jobs.map((savedJob) => (
+                      <div key={savedJob.id} className="bg-secondary/50 rounded-lg p-2.5 space-y-1">
+                        <div className="flex items-start gap-2">
+                          <Checkbox
+                            checked={selectedJobs.has(savedJob.id)}
+                            onCheckedChange={() => handleToggle(savedJob.id)}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <h3 className="text-sm font-medium truncate">{savedJob.jobs.title}</h3>
+                              {exportedJobIds[savedJob.job_id] && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full whitespace-nowrap">
+                                  Exported
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate">{savedJob.jobs.company}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDelete(savedJob.id)}
+                            className="text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="archived" className="mt-0">
+            {archivedJobs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No archived jobs</p>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectAllArchived}
+                      onCheckedChange={handleSelectAllArchived}
+                    />
+                    <span className="text-xs text-muted-foreground">Select all</span>
+                  </div>
+                  {selectedArchivedJobs.size > 0 && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleRestoreSelected}
+                      className="h-7 text-xs"
+                    >
+                      <ArchiveRestore className="h-3 w-3 mr-1" />
+                      Restore ({selectedArchivedJobs.size})
+                    </Button>
+                  )}
+                </div>
+
+                {Object.entries(groupedArchivedJobs).map(([dateTime, jobs]) => (
+                  <div key={dateTime} className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      {dateTime}
+                    </p>
+                    {jobs.map((archivedJob) => (
+                      <div key={archivedJob.id} className="bg-secondary/50 rounded-lg p-2.5 space-y-1">
+                        <div className="flex items-start gap-2">
+                          <Checkbox
+                            checked={selectedArchivedJobs.has(archivedJob.id)}
+                            onCheckedChange={() => handleToggleArchived(archivedJob.id)}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-sm font-medium truncate">{archivedJob.jobs.title}</h3>
+                            <p className="text-xs text-muted-foreground truncate">{archivedJob.jobs.company}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteArchived(archivedJob.id)}
+                            className="text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      )}
+    </>
+  );
+
+  // Mobile: Show as a drawer/sheet
+  if (isMobile) {
+    return (
+      <>
+        <Sheet open={isOpen} onOpenChange={setIsOpen}>
+          <SheetTrigger asChild>
+            <Button
+              className="fixed bottom-6 right-6 z-40 rounded-full shadow-lg h-14 w-14"
+              size="icon"
+            >
+              <Bookmark className="h-6 w-6" />
+              {savedJobs.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  {savedJobs.length}
+                </span>
               )}
-            </TabsContent>
-          </Tabs>
-        )}
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-full sm:w-96 p-4 overflow-y-auto">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Saved Jobs</SheetTitle>
+            </SheetHeader>
+            {sidebarContent}
+          </SheetContent>
+        </Sheet>
+        <PricingDialog open={showPricing} onOpenChange={setShowPricing} />
+      </>
+    );
+  }
+
+  // Desktop: Show as fixed sidebar
+  return (
+    <>
+      <div className="fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-card border-l border-border p-4 overflow-y-auto hidden lg:block">
+        {sidebarContent}
       </div>
 
       <PricingDialog open={showPricing} onOpenChange={setShowPricing} />

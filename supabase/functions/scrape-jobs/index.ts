@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
@@ -24,6 +25,11 @@ interface ScrapeRequest {
   experienceLevel?: string;
   benefits?: string;
 }
+
+const logStep = (step: string, details?: any) => {
+  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  console.log(`[SCRAPER] ${step}${detailsStr}`);
+};
 
 // Sanitize text content to prevent XSS and injection attacks
 const sanitizeText = (text: string | null | undefined, maxLength: number = 5000): string | null => {
@@ -236,6 +242,30 @@ function filterJobs(jobs: Job[], searchQuery?: string, experienceLevel?: string)
   return filtered;
 }
 
+// Check user subscription tier
+async function getUserSubscriptionTier(userEmail: string, stripeKey: string): Promise<"free" | "pro"> {
+  try {
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+    const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+    
+    if (customers.data.length === 0) {
+      return "free";
+    }
+
+    const customerId = customers.data[0].id;
+    const subscriptions = await stripe.subscriptions.list({
+      customer: customerId,
+      status: "active",
+      limit: 1,
+    });
+
+    return subscriptions.data.length > 0 ? "pro" : "free";
+  } catch (error) {
+    logStep("Error checking subscription", { error: String(error) });
+    return "free";
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -253,14 +283,45 @@ serve(async (req) => {
     
     const { boards = ["We Work Remotely"], searchQuery, experienceLevel } = requestData;
     
-    console.log(`[SCRAPER] Starting scrape for boards: ${boards.join(', ')}`);
-    console.log(`[SCRAPER] Search query: ${searchQuery || 'none'}`);
-    console.log(`[SCRAPER] Experience level: ${experienceLevel || 'any'}`);
+    logStep("Starting scrape", { boards, searchQuery, experienceLevel });
     
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
+
+    // Check if user is authenticated and validate board limits
+    const authHeader = req.headers.get("Authorization");
+    let subscriptionTier: "free" | "pro" = "free";
+    
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: userData } = await supabaseClient.auth.getUser(token);
+      
+      if (userData?.user?.email) {
+        const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+        if (stripeKey) {
+          subscriptionTier = await getUserSubscriptionTier(userData.user.email, stripeKey);
+        }
+        logStep("User subscription tier", { email: userData.user.email, tier: subscriptionTier });
+      }
+    }
+
+    // Server-side validation: Free users can only use 2 boards, Pro users can use 4
+    const maxBoards = subscriptionTier === "pro" ? 4 : 2;
+    if (boards.length > maxBoards) {
+      logStep("Board limit exceeded", { requested: boards.length, max: maxBoards, tier: subscriptionTier });
+      return new Response(
+        JSON.stringify({ 
+          error: `${subscriptionTier === "free" ? "Free" : "Pro"} plan users can select up to ${maxBoards} boards. ${subscriptionTier === "free" ? "Upgrade to Pro for up to 4 boards." : ""}`,
+          code: "BOARD_LIMIT_EXCEEDED"
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 403,
+        }
+      );
+    }
 
     // Scrape selected boards in parallel
     const scrapePromises: Promise<Job[]>[] = [];
