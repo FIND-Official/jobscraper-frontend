@@ -119,6 +119,7 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
         </DialogHeader>
 
         <div className="grid md:grid-cols-2 gap-6 mt-6">
+          {/* Free Plan Card */}
           <div className={`border rounded-lg p-6 space-y-4 ${!isPro ? 'border-primary border-2 relative' : 'border-border'}`}>
             {!isPro && (
               <div className="absolute -top-3 right-4 bg-primary text-primary-foreground px-3 py-1 rounded-full text-xs font-semibold">
@@ -143,16 +144,27 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
                 <span>Save unlimited jobs</span>
               </li>
             </ul>
-            <Button
-              variant="outline"
-              className="w-full"
-              disabled={!isPro || loading}
-              onClick={isPro ? handleManageSubscription : undefined}
-            >
-              {!isPro ? "Current Plan" : "Downgrade"}
-            </Button>
+            {isPro ? (
+              <Button
+                variant="outline"
+                className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                onClick={handleManageSubscription}
+                disabled={loading}
+              >
+                {loading ? "Loading..." : "Downgrade"}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled
+              >
+                Current Plan
+              </Button>
+            )}
           </div>
 
+          {/* Pro Plan Card */}
           <div className={`border rounded-lg p-6 space-y-4 relative ${isPro ? 'border-primary border-2' : 'border-border'}`}>
             <div className="absolute -top-3 right-4 bg-primary text-primary-foreground px-3 py-1 rounded-full text-xs font-semibold">
               {isPro ? "Current Plan" : "Recommended"}
@@ -168,7 +180,7 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
               </li>
               <li className="flex items-start gap-2 text-sm">
                 <Check className="h-4 w-4 text-primary mt-0.5" />
-                <span>Access to all job boards</span>
+                <span>Access to all job boards (up to 4)</span>
               </li>
               <li className="flex items-start gap-2 text-sm">
                 <Check className="h-4 w-4 text-primary mt-0.5" />
@@ -183,17 +195,27 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
                 <span>Early access to new features</span>
               </li>
             </ul>
-            <Button
-              className="w-full"
-              onClick={isPro ? handleManageSubscription : handleUpgrade}
-              disabled={loading}
-            >
-              {loading ? "Loading..." : isPro ? "Cancel Plan" : "Upgrade to Pro"}
-            </Button>
+            {isPro ? (
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled
+              >
+                Current Plan
+              </Button>
+            ) : (
+              <Button
+                className="w-full"
+                onClick={handleUpgrade}
+                disabled={loading}
+              >
+                {loading ? "Loading..." : "Upgrade to Pro"}
+              </Button>
+            )}
           </div>
         </div>
 
-        {isPro && (
+        {!isPro && (
           <p className="text-xs text-center text-muted-foreground mt-4">
             Just upgraded? Click the refresh button above to update your status.
           </p>
