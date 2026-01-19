@@ -79,32 +79,37 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      
-      <main className="container mx-auto px-4 pt-24 pb-32 lg:pr-96 lg:pl-4">
-      <div className="max-w-5xl mx-auto lg:mx-0">
-        <JobSearch onScrapeComplete={handleScrapeComplete} />
+  <div className="min-h-screen bg-background">
+    <Header />
 
-        <div className="mt-12">
-          <JobList
-            scrapeSessions={scrapeSessions}
-            onClearSessions={handleClearSessions}
-            refreshTrigger={refreshTrigger}
-          />
+    {/* 👇 THIS IS THE FIX */}
+    <div className="lg:mr-80">
+      <main className="container mx-auto px-4 pt-24 pb-32">
+        <div className="max-w-5xl mx-auto lg:mx-0">
+          <JobSearch onScrapeComplete={handleScrapeComplete} />
+
+          <div className="mt-12">
+            <JobList
+              scrapeSessions={scrapeSessions}
+              onClearSessions={handleClearSessions}
+              refreshTrigger={refreshTrigger}
+            />
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
 
-
-      <SavedJobsSidebar />
       <Footer />
-
-      {showOnboarding && (
-        <OnboardingTour onComplete={handleOnboardingComplete} />
-      )}
     </div>
-  );
+
+    {/* Sidebar stays fixed and OUTSIDE flow */}
+    <SavedJobsSidebar />
+
+    {showOnboarding && (
+      <OnboardingTour onComplete={handleOnboardingComplete} />
+    )}
+  </div>
+);
+
 };
 
 export default Index;
