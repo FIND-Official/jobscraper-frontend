@@ -63,7 +63,7 @@ export const SavedJobsSidebar = () => {
 
   const fetchSavedJobs = async () => {
     if (!user) return;
-    
+
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -83,7 +83,7 @@ export const SavedJobsSidebar = () => {
 
   const fetchArchivedJobs = async () => {
     if (!user) return;
-    
+
     try {
       const { data, error } = await supabase
         .from("archived_jobs")
@@ -100,20 +100,20 @@ export const SavedJobsSidebar = () => {
 
   const fetchMonthlyExportCount = async () => {
     if (!user) return;
-    
+
     try {
       const { data, error } = await supabase
         .from("profiles")
         .select("monthly_export_count, export_reset_date")
         .eq("id", user.id)
         .single();
-      
+
       if (error) throw error;
-      
+
       // Check if we need to reset the counter (new month)
       const resetDate = new Date(data.export_reset_date);
       const now = new Date();
-      
+
       if (now >= resetDate) {
         // Reset the counter for the new month
         const nextResetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -235,11 +235,11 @@ export const SavedJobsSidebar = () => {
         .in("id", Array.from(selectedJobs));
 
       if (error) throw error;
-      
+
       setSavedJobs(savedJobs.filter(job => !selectedJobs.has(job.id)));
       setSelectedJobs(new Set());
       setSelectAll(false);
-      
+
       toast({
         title: "Jobs removed",
         description: `${selectedJobs.size} job(s) removed from saved list`,
@@ -259,7 +259,7 @@ export const SavedJobsSidebar = () => {
     try {
       // Get the job_ids of selected saved jobs
       const jobsToArchive = savedJobs.filter(job => selectedJobs.has(job.id));
-      
+
       // Insert into archived_jobs
       const { error: archiveError } = await supabase
         .from("archived_jobs")
@@ -280,15 +280,15 @@ export const SavedJobsSidebar = () => {
         .in("id", Array.from(selectedJobs));
 
       if (deleteError) throw deleteError;
-      
+
       setSelectedJobs(new Set());
       setSelectAll(false);
-      
+
       toast({
         title: "Jobs archived",
         description: `${jobsToArchive.length} job(s) moved to archive`,
       });
-      
+
       fetchSavedJobs();
       fetchArchivedJobs();
     } catch (error) {
@@ -305,7 +305,7 @@ export const SavedJobsSidebar = () => {
 
     try {
       const jobsToRestore = archivedJobs.filter(job => selectedArchivedJobs.has(job.id));
-      
+
       // Insert back into saved_jobs
       const { error: saveError } = await supabase
         .from("saved_jobs")
@@ -326,15 +326,15 @@ export const SavedJobsSidebar = () => {
         .in("id", Array.from(selectedArchivedJobs));
 
       if (deleteError) throw deleteError;
-      
+
       setSelectedArchivedJobs(new Set());
       setSelectAllArchived(false);
-      
+
       toast({
         title: "Jobs restored",
         description: `${jobsToRestore.length} job(s) restored to saved list`,
       });
-      
+
       fetchSavedJobs();
       fetchArchivedJobs();
     } catch (error) {
@@ -354,7 +354,7 @@ export const SavedJobsSidebar = () => {
         .eq("id", savedJobId);
 
       if (error) throw error;
-      
+
       setSavedJobs(savedJobs.filter(job => job.id !== savedJobId));
       toast({
         title: "Job removed",
@@ -377,7 +377,7 @@ export const SavedJobsSidebar = () => {
         .eq("id", archivedJobId);
 
       if (error) throw error;
-      
+
       setArchivedJobs(archivedJobs.filter(job => job.id !== archivedJobId));
       toast({
         title: "Job removed",
@@ -404,13 +404,13 @@ export const SavedJobsSidebar = () => {
     }
 
     const jobsToExportCount = selectedJobs.size;
-    
+
     // Only check export limits for free users
     if (subscriptionTier === "free" && (monthlyExportCount + jobsToExportCount) > FREE_EXPORT_LIMIT) {
       const remaining = FREE_EXPORT_LIMIT - monthlyExportCount;
       toast({
         title: "Export limit reached",
-        description: remaining > 0 
+        description: remaining > 0
           ? `You can only export ${remaining} more job(s) this month. Upgrade to Pro for unlimited exports.`
           : "Free plan users can export 50 jobs per month. Upgrade to Pro for unlimited exports.",
         variant: "destructive",
@@ -422,7 +422,7 @@ export const SavedJobsSidebar = () => {
     try {
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
-      
+
       if (!token) {
         toast({
           title: "Authentication required",
@@ -434,7 +434,7 @@ export const SavedJobsSidebar = () => {
 
       // Pass selected job IDs to the export function
       const selectedJobIdsArray = Array.from(selectedJobs);
-      
+
       const { data, error } = await supabase.functions.invoke("export-saved-jobs", {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -462,7 +462,7 @@ export const SavedJobsSidebar = () => {
       if (subscriptionTier === "free" && user) {
         const newCount = monthlyExportCount + jobsToExportCount;
         setMonthlyExportCount(newCount);
-        
+
         await supabase
           .from("profiles")
           .update({ monthly_export_count: newCount })
@@ -482,7 +482,7 @@ export const SavedJobsSidebar = () => {
         title: "Export successful",
         description: `${jobsToExportCount} job(s) have been exported`,
       });
-      
+
       // Clear selection after export
       setSelectedJobs(new Set());
       setSelectAll(false);
