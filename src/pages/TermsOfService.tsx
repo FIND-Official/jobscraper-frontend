@@ -3,88 +3,138 @@ import { Footer } from "@/components/Footer";
 
 const TermsOfService = () => {
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <>
       <Header />
-      
-      <main className="flex-1 container mx-auto px-4 py-12 max-w-4xl">
-        <h1 className="text-4xl font-bold mb-8 text-foreground">Terms of Service</h1>
+      <main className="flex-1 container mx-auto px-4 pt-28 pb-12 max-w-4xl">
+        <h1 className="text-4xl font-bold mb-8 text-foreground">Terms and Conditions</h1>
 
-        <div className="space-y-6 text-muted-foreground">
+        <div className="space-y-8 text-muted-foreground">
 
           <div>
-            <h3 className="text-xl font-semibold mb-3 text-foreground">1. Acceptance of Terms</h3>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Introduction</h3>
             <p>
-              By accessing and using this job search platform, you accept and agree to be bound by the terms and provision of this agreement. 
-              If you do not agree to abide by the above, please do not use this service.
+              Welcome to FIND Services. These Terms of Service govern your use of our website and services.
+              By accessing or using our Service, you agree to be bound by these Terms and our Privacy Policy.
             </p>
           </div>
 
           <div>
-            <h3 className="text-xl font-semibold mb-3 text-foreground">2. Use License</h3>
-            <p className="mb-2">
-              Permission is granted to temporarily access and use the materials on this platform for personal, non-commercial transitory viewing only.
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Communications</h3>
+            <p>
+              By using our Service, you agree to receive newsletters, marketing materials, and other
+              communications from us. You may opt out of these communications at any time by following
+              the unsubscribe link or contacting us.
             </p>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Purchases</h3>
+            <p className="mb-2">
+              If you wish to purchase any product or service through the Service, you may be asked to
+              provide payment details including billing information and payment method.
+            </p>
+            <p>
+              You represent that you have the legal right to use any payment method provided and that
+              the information you supply is accurate and complete.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Subscriptions</h3>
+            <p>
+              Some parts of the Service are billed on a subscription basis. Subscriptions renew
+              automatically at the end of each billing cycle unless canceled.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Free Trial</h3>
+            <p>
+              We may offer a free trial for a limited time. If you provide payment details when signing
+              up, you will not be charged until the free trial period ends.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Refunds</h3>
+            <p>
+              Refunds for services or contracts may be issued within the period specified at the time
+              of purchase.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">User Conduct</h3>
             <ul className="list-disc list-inside space-y-1 ml-4">
-              <li>Modify or copy the materials</li>
-              <li>Use the materials for any commercial purpose</li>
-              <li>Attempt to reverse engineer any software contained on the platform</li>
-              <li>Remove copyright or proprietary notations</li>
-              <li>Transfer materials to another person</li>
+              <li>Do not use the Service for unlawful purposes</li>
+              <li>Do not attempt unauthorized access to the platform</li>
+              <li>Do not transmit spam or promotional messages</li>
+              <li>Do not introduce malicious software</li>
+              <li>Do not disrupt the operation of the Service</li>
             </ul>
           </div>
 
           <div>
-            <h3 className="text-xl font-semibold mb-3 text-foreground">3. User Account</h3>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Accounts</h3>
             <p>
-              To access certain features of the platform, you may be required to create an account. 
+              When creating an account, you agree to provide accurate and complete information.
               You are responsible for maintaining the confidentiality of your account credentials.
             </p>
           </div>
 
           <div>
-            <h3 className="text-xl font-semibold mb-3 text-foreground">4. Subscription and Payments</h3>
-            <p className="mb-2">Premium features include:</p>
-            <ul className="list-disc list-inside space-y-1 ml-4">
-              <li>Unlimited job searches</li>
-              <li>CSV export functionality</li>
-              <li>Priority access to new features</li>
-              <li>Ad-free experience</li>
-            </ul>
-            <p className="mt-2">
-              Subscription fees are charged on a recurring basis. You may cancel your subscription anytime.
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Intellectual Property</h3>
+            <p>
+              The Service and its original content, features, and functionality remain the exclusive
+              property of FIND Services and its licensors.
             </p>
           </div>
 
           <div>
-            <h3 className="text-xl font-semibold mb-3 text-foreground">5. Job Listings Disclaimer</h3>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Disclaimer of Warranty</h3>
             <p>
-              Job listings are aggregated from third-party sources. We do not guarantee accuracy or availability 
-              of listings. Users should verify job details directly with the employer.
+              The Service is provided on an “AS IS” and “AS AVAILABLE” basis without warranties of any kind.
+              Your use of the Service is at your own risk.
             </p>
           </div>
 
           <div>
-            <h3 className="text-xl font-semibold mb-3 text-foreground">6. User Conduct</h3>
-            <ul className="list-disc list-inside space-y-1 ml-4">
-              <li>Do not use the platform for unlawful purposes</li>
-              <li>Do not attempt unauthorized access</li>
-              <li>Do not disrupt servers or platform functionality</li>
-              <li>Do not scrape or harvest data</li>
-              <li>Do not impersonate others</li>
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="text-xl font-semibold mb-3 text-foreground">7. Limitation of Liability</h3>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Limitation of Liability</h3>
             <p>
-              We are not liable for damages arising from use or inability to use the platform.
+              FIND Services shall not be liable for any indirect, incidental, special, or consequential
+              damages arising from the use of the Service.
             </p>
           </div>
 
           <div>
-            <h3 className="text-xl font-semibold mb-3 text-foreground">8. Modifications</h3>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Termination</h3>
             <p>
-              We may revise these terms at any time. Continued use of the platform means you accept the updated terms.
+              We may terminate or suspend access to the Service immediately without prior notice if
+              you breach these Terms.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Governing Law</h3>
+            <p>
+              These Terms are governed by the laws of Nigeria without regard to conflict of law provisions.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Changes to Terms</h3>
+            <p>
+              We reserve the right to modify these Terms at any time. Continued use of the Service
+              following any changes means you accept the revised Terms.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-semibold mb-3 text-foreground">Contact Us</h3>
+            <p>
+              If you have any questions about these Terms, please contact us at:
+              <br />
+              <strong>info@wefindservices.org</strong>
             </p>
           </div>
 
@@ -92,7 +142,7 @@ const TermsOfService = () => {
       </main>
 
       <Footer />
-    </div>
+    </>
   );
 };
 
