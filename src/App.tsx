@@ -7,7 +7,8 @@ import { AuthProvider } from "@/contexts/AuthContext";
 
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-import TermsAndPrivacy from "./pages/TermsAndPrivacy";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import Account from "./pages/Account";
 import ResetPassword from "./pages/ResetPassword";
 import Auth from "./pages/Auth"; // 👈 ADD THIS
@@ -25,7 +26,8 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} /> {/* 👈 AUTH PAGE */}
             <Route path="/account" element={<Account />} />
-            <Route path="/terms-and-privacy" element={<TermsAndPrivacy />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
             <Route path="/reset-password" element={<ResetPassword />} />
 
             <Route path="*" element={<NotFound />} />
