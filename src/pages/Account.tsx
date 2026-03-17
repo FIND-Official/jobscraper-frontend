@@ -23,6 +23,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { DateRange } from "react-day-picker";
 import NotificationPreferences from "@/components/NotificationPreferences";
+import { Link } from "react-router-dom";
 
 interface JobBoardStats {
   [key: string]: number;
@@ -397,6 +398,29 @@ const Account = () => {
             <div className="md:col-span-2">
               <NotificationPreferences />
             </div>
+            {/* Legal Links */}
+            <Card className="md:col-span-2">
+              <CardHeader>
+              <CardTitle className="text-lg">Legal</CardTitle>
+               <CardDescription>
+                  Review our policies and terms of service
+                </CardDescription>
+               </CardHeader>
+
+              <CardContent className="flex gap-4">
+               <Link to="/privacy">
+               <Button variant="outline">
+                Privacy Policy
+               </Button>
+              </Link>
+
+               <Link to="/terms">
+                 <Button variant="outline">
+                  Terms of Service
+                 </Button>
+                 </Link>
+              </CardContent>
+              </Card>
           </div>
         )}
       </main>

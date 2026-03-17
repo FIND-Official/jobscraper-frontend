@@ -57,14 +57,14 @@ export const Footer = () => {
                 </a>
 
                 <Link
-                  to="/terms-and-privacy"
+                  to="/privacy"
                   className="text-muted-foreground hover:text-primary transition-colors"
                 >
                   Privacy
                 </Link>
 
                 <Link
-                  to="/terms-and-privacy"
+                  to="/terms"
                   className="text-muted-foreground hover:text-primary transition-colors"
                 >
                   Terms
