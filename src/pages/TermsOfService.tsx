@@ -1,6 +1,8 @@
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 
+
+// updated terms page
 const TermsOfService = () => {
   const termsHTML = `
 <style>
