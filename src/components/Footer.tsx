@@ -7,12 +7,12 @@ export const Footer = () => {
 
   return (
     <>
-      <footer className="border-t border-border mt-20 py-10">
+      <footer className="bg-black text-white border-t border-gray-800 mt-0 py-10">
         <div className="container mx-auto px-9">
           <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
             <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
 
-              <div className="text-sm text-muted-foreground text-center md:text-left">
+              <div className="text-sm text-gray-400 text-center md:text-left">
                 <div className="font-semibold text-foreground mb-1">
                   JobScraper
                 </div>
