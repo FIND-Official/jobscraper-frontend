@@ -1,5 +1,6 @@
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { BackToTop } from "@/components/BackToTop";
 
 const PrivacyPolicy = () => {
   const termlyHTML = `<style>
@@ -182,6 +183,7 @@ word-break: break-word !important;
       </main>
 
       <Footer />
+      <BackToTop />
     </div>
   );
 };
