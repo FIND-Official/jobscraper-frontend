@@ -7,13 +7,24 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import CleanText from "@/components/CleanText";
+import DOMPurify from "dompurify";
 import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ExternalLink, MapPin, Briefcase, Building2, Calendar, Sparkles, Loader2, Lock } from "lucide-react";
+import {
+  ExternalLink,
+  MapPin,
+  Briefcase,
+  Building2,
+  Calendar,
+  Sparkles,
+  Loader2,
+  Lock,
+} from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,16 +42,6 @@ interface Job {
   posted_date: string | null;
   scraped_at: string;
   tags: string[];
-}
-
-interface ParsedJob {
-  type: string;
-  title: string;
-  location: string;
-  description: string;
-  responsibilities: string[];
-  qualifications: string[];
-  benefits: string[];
 }
 
 interface JobDetailModalProps {
@@ -62,49 +63,14 @@ export const JobDetailModal = ({
 }: JobDetailModalProps) => {
   const { subscriptionTier, session } = useAuth();
   const [isParsing, setIsParsing] = useState(false);
-  const [parsedJob, setParsedJob] = useState<ParsedJob | null>(null);
+
+  // HTML CLEANER FUNCTION - NO EXTRA FILES NEEDED
 
   if (!job) return null;
 
-  const cleanDescription = job.description?.replace(/<[^>]*>/g, "") || "";
   const isPro = subscriptionTier === "pro";
-  
-  // Parse description sections (basic parsing for non-Pro users)
-  const parseDescription = (desc: string) => {
-    const sections = {
-      overview: "",
-      responsibilities: [] as string[],
-      qualifications: [] as string[],
-      benefits: [] as string[],
-    };
 
-    const lines = desc.split(/\n|(?:\. )/);
-    let currentSection = "overview";
-
-    lines.forEach((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-
-      const lowerLine = trimmed.toLowerCase();
-      if (lowerLine.includes("responsibilit") || lowerLine.includes("duties") || lowerLine.includes("what you'll do")) {
-        currentSection = "responsibilities";
-      } else if (lowerLine.includes("qualif") || lowerLine.includes("requirement") || lowerLine.includes("what you need")) {
-        currentSection = "qualifications";
-      } else if (lowerLine.includes("benefit") || lowerLine.includes("perk") || lowerLine.includes("we offer")) {
-        currentSection = "benefits";
-      } else {
-        if (currentSection === "overview") {
-          sections.overview += trimmed + " ";
-        } else {
-          (sections[currentSection as keyof typeof sections] as string[]).push(trimmed);
-        }
-      }
-    });
-
-    return sections;
-  };
-
-  const handleAIParse = async () => {
+  const handleAIParse = async (): Promise<void> => {
     if (!session?.access_token) {
       toast({
         title: "Authentication required",
@@ -118,7 +84,7 @@ export const JobDetailModal = ({
     try {
       const { data, error } = await supabase.functions.invoke("parse-job-ai", {
         body: {
-          description: cleanDescription,
+          description: job.description,
           title: job.title,
           company: job.company,
           location: job.location,
@@ -129,7 +95,10 @@ export const JobDetailModal = ({
       });
 
       if (error) {
-        if (error.message?.includes("403") || error.message?.includes("Pro subscription")) {
+        if (
+          error.message?.includes("403") ||
+          error.message?.includes("Pro subscription")
+        ) {
           toast({
             title: "Pro subscription required",
             description: "AI parsing is only available for Pro users",
@@ -141,12 +110,12 @@ export const JobDetailModal = ({
         return;
       }
 
-      setParsedJob(data);
       toast({
         title: "AI parsing complete",
         description: "Job details have been structured",
       });
-    } catch (error: any) {
+    } catch (err) {
+      const error = err as Error;
       console.error("AI parsing error:", error);
       toast({
         title: "Parsing failed",
@@ -158,70 +127,65 @@ export const JobDetailModal = ({
     }
   };
 
-  const baseSections = parseDescription(cleanDescription);
-  
-  // Use AI-parsed data if available
-  const displaySections = parsedJob ? {
-    overview: parsedJob.description,
-    responsibilities: parsedJob.responsibilities,
-    qualifications: parsedJob.qualifications,
-    benefits: parsedJob.benefits,
-  } : baseSections;
-
   return (
-    <Dialog open={open} onOpenChange={(newOpen) => {
-      if (!newOpen) {
-        setParsedJob(null);
-      }
-      onOpenChange(newOpen);
-    }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <DialogTitle className="text-2xl">{parsedJob?.title || job.title}</DialogTitle>
-                <Badge variant="secondary" className="bg-primary/20 text-primary border-0">
+                <DialogTitle className="text-2xl">{job.title}</DialogTitle>
+                <Badge
+                  variant="secondary"
+                  className="bg-primary/20 text-primary border-0"
+                >
                   {job.source}
                 </Badge>
-                {parsedJob && (
-                  <Badge variant="outline" className="text-purple-600 border-purple-600 bg-purple-50">
-                    AI Parsed
-                  </Badge>
-                )}
                 {isExported && (
-                  <Badge variant="outline" className="text-green-600 border-green-600 bg-green-50">
+                  <Badge
+                    variant="outline"
+                    className="text-green-600 border-green-600 bg-green-50"
+                  >
                     Exported
                   </Badge>
                 )}
                 {isStale && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge variant="outline" className="text-yellow-600 border-yellow-600 bg-yellow-50 cursor-help">
+                      <Badge
+                        variant="outline"
+                        className="text-yellow-600 border-yellow-600 bg-yellow-50 cursor-help"
+                      >
                         Potentially old job
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="text-xs">Jobs older than 14 days may be closed</p>
+                      <p className="text-xs">
+                        Jobs older than 14 days may be closed
+                      </p>
                     </TooltipContent>
                   </Tooltip>
                 )}
                 {duplicateCount && duplicateCount > 0 && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge variant="outline" className="text-blue-600 border-blue-600 bg-blue-50 cursor-help">
+                      <Badge
+                        variant="outline"
+                        className="text-blue-600 border-blue-600 bg-blue-50 cursor-help"
+                      >
                         {duplicateCount} duplicates merged
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p className="text-xs max-w-[200px]">
-                        This job was posted on multiple boards. We merged them to avoid showing duplicates.
+                        This job was posted on multiple boards. We merged them
+                        to avoid showing duplicates.
                       </p>
                     </TooltipContent>
                   </Tooltip>
                 )}
               </div>
-              
+
               <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                 <span className="flex items-center gap-1">
                   <Building2 className="h-4 w-4" />
@@ -229,12 +193,12 @@ export const JobDetailModal = ({
                 </span>
                 <span className="flex items-center gap-1">
                   <MapPin className="h-4 w-4" />
-                  {parsedJob?.location || job.location || "Not specified"}
+                  {job.location || "Not specified"}
                 </span>
-                {(parsedJob?.type || job.job_type) && (
+                {job.job_type && (
                   <span className="flex items-center gap-1">
                     <Briefcase className="h-4 w-4" />
-                    {parsedJob?.type || job.job_type}
+                    {job.job_type}
                   </span>
                 )}
                 {job.posted_date && (
@@ -251,27 +215,25 @@ export const JobDetailModal = ({
         {/* AI Parse Button */}
         <div className="flex justify-end">
           {isPro ? (
-            !parsedJob && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleAIParse}
-                disabled={isParsing}
-                className="text-purple-600 border-purple-600 hover:bg-purple-50"
-              >
-                {isParsing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Parsing...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Parse with AI
-                  </>
-                )}
-              </Button>
-            )
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAIParse}
+              disabled={isParsing}
+              className="text-purple-600 border-purple-600 hover:bg-purple-50"
+            >
+              {isParsing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Parsing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Parse with AI
+                </>
+              )}
+            </Button>
           ) : (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -283,11 +245,18 @@ export const JobDetailModal = ({
                 >
                   <Lock className="h-4 w-4 mr-2" />
                   Parse with AI
-                  <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">PRO</Badge>
+                  <Badge
+                    variant="secondary"
+                    className="ml-2 text-[10px] px-1.5 py-0"
+                  >
+                    PRO
+                  </Badge>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p className="text-xs">Upgrade to Pro to use AI-powered job parsing</p>
+                <p className="text-xs">
+                  Upgrade to Pro to use AI-powered job parsing
+                </p>
               </TooltipContent>
             </Tooltip>
           )}
@@ -310,79 +279,13 @@ export const JobDetailModal = ({
             </div>
           )}
 
-          {/* Description */}
-          {displaySections.overview && (
-            <div>
-              <h4 className="font-semibold mb-2">Description</h4>
-              <p className="text-muted-foreground leading-relaxed">
-                {displaySections.overview || "Not specified"}
-              </p>
+          {/* Description - CLEAN HTML */}
+          <div>
+            <h4 className="font-semibold mb-2">Description</h4>
+            <div className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              <CleanText html={job.description} />
             </div>
-          )}
-
-          {/* Responsibilities */}
-          {displaySections.responsibilities.length > 0 ? (
-            <div>
-              <h4 className="font-semibold mb-2">Responsibilities</h4>
-              <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                {displaySections.responsibilities.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <div>
-              <h4 className="font-semibold mb-2">Responsibilities</h4>
-              <p className="text-muted-foreground">Not specified</p>
-            </div>
-          )}
-
-          {/* Qualifications */}
-          {displaySections.qualifications.length > 0 ? (
-            <div>
-              <h4 className="font-semibold mb-2">Qualifications</h4>
-              <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                {displaySections.qualifications.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <div>
-              <h4 className="font-semibold mb-2">Qualifications</h4>
-              <p className="text-muted-foreground">Not specified</p>
-            </div>
-          )}
-
-          {/* Benefits */}
-          {displaySections.benefits.length > 0 ? (
-            <div>
-              <h4 className="font-semibold mb-2">Benefits</h4>
-              <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                {displaySections.benefits.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <div>
-              <h4 className="font-semibold mb-2">Benefits</h4>
-              <p className="text-muted-foreground">Not specified</p>
-            </div>
-          )}
-
-          {/* Raw description if nothing was parsed */}
-          {!displaySections.overview && 
-           displaySections.responsibilities.length === 0 && 
-           displaySections.qualifications.length === 0 && 
-           displaySections.benefits.length === 0 && (
-            <div>
-              <h4 className="font-semibold mb-2">Full Description</h4>
-              <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                {cleanDescription || "Not specified"}
-              </p>
-            </div>
-          )}
+          </div>
         </div>
 
         <Separator className="my-4" />

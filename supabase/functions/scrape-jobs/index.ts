@@ -31,23 +31,53 @@ const logStep = (step: string, details?: any) => {
   console.log(`[SCRAPER] ${step}${detailsStr}`);
 };
 
-// Sanitize text content to prevent XSS and injection attacks
-const sanitizeText = (text: string | null | undefined, maxLength: number = 5000): string | null => {
+// AGGRESSIVE HTML CLEANER - Removes ALL HTML tags
+const cleanHTML = (text: string | null | undefined, maxLength: number = 5000): string | null => {
   if (!text) return null;
-  
-  let sanitized = String(text)
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<[^>]*>/g, '');
-  
+
+  let sanitized = String(text);
+
+  // ✅ 1. Remove images only
+  sanitized = sanitized.replace(/<img[^>]*>/gi, '');
+
+  // ✅ 2. KEEP structure (convert instead of deleting)
+  sanitized = sanitized.replace(/<\/p>/gi, '\n\n');
+  sanitized = sanitized.replace(/<br\s*\/?>/gi, '\n');
+  sanitized = sanitized.replace(/<\/li>/gi, '\n');
+  sanitized = sanitized.replace(/<li>/gi, '• ');
+
+  // ✅ 3. Remove ONLY unwanted tags (keep text)
+  sanitized = sanitized.replace(/<\/?(div|span|section|ul)[^>]*>/gi, '');
+
+  // ✅ 4. Remove attributes but KEEP content
+  sanitized = sanitized.replace(/\b\w+="[^"]*"/g, '');
+
+  // ✅ 5. Remove remaining tags BUT AFTER structure preserved
+  sanitized = sanitized.replace(/<[^>]*>/g, '');
+
+  // ✅ 6. Decode entities
   sanitized = sanitized
-    .replace(/[<>]/g, '')
-    .replace(/&lt;/g, '')
-    .replace(/&gt;/g, '')
-    .replace(/javascript:/gi, '')
-    .replace(/on\w+=/gi, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+
+  // ✅ 7. Fix URLs
+  sanitized = sanitized.replace(/https?:\/{1,}/g, 'https://');
+  sanitized = sanitized.replace(/https:\s+/g, 'https://');
+  sanitized = sanitized.replace(/http:\s+/g, 'http://');
+
+  // ✅ 8. Clean spacing but KEEP line breaks
+  sanitized = sanitized
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n\s*\n/g, '\n\n')
     .trim();
-  
-  return sanitized.substring(0, maxLength);
+
+  return sanitized.substring(0, maxLength) || null;
+};
+
+const sanitizeText = (text: string | null | undefined, maxLength: number = 5000): string | null => {
+  return cleanHTML(text, maxLength);
 };
 
 const sanitizeUrl = (url: string | null | undefined): string => {
@@ -75,7 +105,6 @@ async function scrapeWeWorkRemotely(): Promise<Job[]> {
     
     const jobs: Job[] = [];
     
-    // Parse RSS feed
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
     let match;
     
@@ -92,7 +121,6 @@ async function scrapeWeWorkRemotely(): Promise<Job[]> {
       const description = descMatch?.[1] || descMatch?.[2] || '';
       const pubDate = pubDateMatch?.[1] || '';
       
-      // Parse title format: "Company: Job Title"
       const titleParts = rawTitle.split(':');
       const company = titleParts.length > 1 ? titleParts[0].trim() : 'Unknown Company';
       const title = titleParts.length > 1 ? titleParts.slice(1).join(':').trim() : rawTitle.trim();
@@ -205,11 +233,9 @@ async function scrapeWorkingNomads(): Promise<Job[]> {
 
 async function scrapeRemoteCom(): Promise<Job[]> {
   console.log("[SCRAPER] Remote.com - using placeholder (API not publicly available)");
-  // Remote.com doesn't have a public API, return empty
   return [];
 }
 
-// Filter jobs based on search criteria
 function filterJobs(jobs: Job[], searchQuery?: string, experienceLevel?: string): Job[] {
   let filtered = jobs;
   
@@ -242,7 +268,6 @@ function filterJobs(jobs: Job[], searchQuery?: string, experienceLevel?: string)
   return filtered;
 }
 
-// Check user subscription tier
 async function getUserSubscriptionTier(userEmail: string, stripeKey: string): Promise<"free" | "pro"> {
   try {
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
@@ -272,12 +297,10 @@ serve(async (req) => {
   }
 
   try {
-    // Parse request body
     let requestData: ScrapeRequest = {};
     try {
       requestData = await req.json();
     } catch {
-      // Default to all boards if no body provided
       requestData = { boards: ["We Work Remotely", "RemoteOK"] };
     }
     
@@ -290,7 +313,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Check if user is authenticated and validate board limits
     const authHeader = req.headers.get("Authorization");
     let subscriptionTier: "free" | "pro" = "free";
     
@@ -307,7 +329,6 @@ serve(async (req) => {
       }
     }
 
-    // Server-side validation: Free users can only use 2 boards, Pro users can use 4
     const maxBoards = subscriptionTier === "pro" ? 4 : 2;
     if (boards.length > maxBoards) {
       logStep("Board limit exceeded", { requested: boards.length, max: maxBoards, tier: subscriptionTier });
@@ -323,7 +344,6 @@ serve(async (req) => {
       );
     }
 
-    // Scrape selected boards in parallel
     const scrapePromises: Promise<Job[]>[] = [];
     
     for (const board of boards) {
@@ -350,7 +370,6 @@ serve(async (req) => {
     
     console.log(`[SCRAPER] Total jobs scraped: ${allJobs.length}`);
     
-    // Apply filters
     allJobs = filterJobs(allJobs, searchQuery, experienceLevel);
     console.log(`[SCRAPER] Jobs after filtering: ${allJobs.length}`);
 
@@ -369,7 +388,6 @@ serve(async (req) => {
       );
     }
 
-    // Upsert jobs to database
     const { error } = await supabaseClient
       .from("jobs")
       .upsert(allJobs, {
