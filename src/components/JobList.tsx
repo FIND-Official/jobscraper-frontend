@@ -1,9 +1,23 @@
 import { useEffect, useState } from "react";
-import { Bookmark, ExternalLink, MapPin, Briefcase, X, Trash2 } from "lucide-react";
+import {
+  Bookmark,
+  ExternalLink,
+  MapPin,
+  Briefcase,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import CleanText from "@/components/CleanText";
+import DOMPurify from "dompurify";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthDialog } from "./AuthDialog";
@@ -47,12 +61,18 @@ interface JobListProps {
 const DISMISSED_JOBS_KEY = "dismissed_jobs_anonymous";
 const HAS_SCRAPED_KEY = "has_scraped_jobs";
 
-export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }: JobListProps) => {
+export const JobList = ({
+  scrapeSessions = [],
+  onClearSessions,
+  refreshTrigger,
+}: JobListProps) => {
   const { user } = useAuth();
   const [jobs, setJobs] = useState<DeduplicatedJob[]>([]);
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set());
   const [exportedJobIds, setExportedJobIds] = useState<Set<string>>(new Set());
-  const [dismissedJobIds, setDismissedJobIds] = useState<Set<string>>(new Set());
+  const [dismissedJobIds, setDismissedJobIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [loading, setLoading] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -60,12 +80,15 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
   const [selectAll, setSelectAll] = useState(false);
   const [selectedJob, setSelectedJob] = useState<DeduplicatedJob | null>(null);
   const [showJobDetail, setShowJobDetail] = useState(false);
-  const [urlFirstSeen, setUrlFirstSeen] = useState<Map<string, string>>(new Map());
+  const [urlFirstSeen, setUrlFirstSeen] = useState<Map<string, string>>(
+    new Map(),
+  );
   const [sortBy, setSortBy] = useState<"relevance" | "date">("relevance");
   const [hasScraped, setHasScraped] = useState(false);
   const jobsPerPage = 10;
 
-  // Check if user has scraped before
+  // HTML CLEANER FUNCTION - NO EXTRA FILES NEEDED
+
   useEffect(() => {
     const scraped = localStorage.getItem(HAS_SCRAPED_KEY);
     setHasScraped(scraped === "true");
@@ -79,9 +102,7 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
     }
   }, [user]);
 
-  // Fetch jobs after dismissedJobIds is loaded
   useEffect(() => {
-    // Only fetch jobs if user has scraped before or is authenticated
     if (hasScraped || user) {
       fetchJobs();
     } else {
@@ -89,33 +110,30 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
     }
   }, [dismissedJobIds, hasScraped, user]);
 
-  // Refresh jobs when scrape completes
   useEffect(() => {
     if (refreshTrigger && refreshTrigger > 0) {
-      // Mark that user has scraped
       localStorage.setItem(HAS_SCRAPED_KEY, "true");
       setHasScraped(true);
       fetchJobs();
     }
   }, [refreshTrigger]);
 
-  // Real-time subscription for saved jobs
   useEffect(() => {
     if (!user) return;
 
     const channel = supabase
-      .channel('job-list-saved-changes')
+      .channel("job-list-saved-changes")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'saved_jobs',
-          filter: `user_id=eq.${user.id}`
+          event: "*",
+          schema: "public",
+          table: "saved_jobs",
+          filter: `user_id=eq.${user.id}`,
         },
         () => {
           fetchSavedJobs();
-        }
+        },
       )
       .subscribe();
 
@@ -135,7 +153,7 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
   const deduplicateJobs = (rawJobs: Job[]): DeduplicatedJob[] => {
     const urlMap = new Map<string, Job[]>();
     const firstSeenMap = new Map<string, string>();
-    
+
     rawJobs.forEach((job) => {
       const url = job.apply_url.toLowerCase().trim();
       if (!urlMap.has(url)) {
@@ -156,11 +174,12 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
     const deduplicated: DeduplicatedJob[] = [];
     urlMap.forEach((duplicates) => {
       const sortedDuplicates = duplicates.sort(
-        (a, b) => new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime()
+        (a, b) =>
+          new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime(),
       );
       const primaryJob = sortedDuplicates[0];
       const sources = [...new Set(duplicates.map((d) => d.source))];
-      
+
       deduplicated.push({
         ...primaryJob,
         duplicateCount: duplicates.length - 1,
@@ -169,26 +188,25 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
     });
 
     return deduplicated.sort(
-      (a, b) => new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime()
+      (a, b) =>
+        new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime(),
     );
   };
 
   const fetchDismissedJobs = async () => {
     if (user) {
-      // Fetch from database for authenticated users
       try {
         const { data, error } = await supabase
           .from("dismissed_jobs")
           .select("job_id")
           .eq("user_id", user.id);
-        
+
         if (error) throw error;
-        setDismissedJobIds(new Set(data.map(item => item.job_id)));
+        setDismissedJobIds(new Set(data.map((item) => item.job_id)));
       } catch (error) {
         console.error("Error fetching dismissed jobs:", error);
       }
     } else {
-      // Use localStorage for anonymous users
       const dismissed = localStorage.getItem(DISMISSED_JOBS_KEY);
       if (dismissed) {
         setDismissedJobIds(new Set(JSON.parse(dismissed)));
@@ -206,9 +224,10 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
         .limit(500);
 
       if (error) throw error;
-      
-      // Filter out dismissed jobs
-      const filteredData = (data || []).filter(job => !dismissedJobIds.has(job.id));
+
+      const filteredData = (data || []).filter(
+        (job) => !dismissedJobIds.has(job.id),
+      );
       const deduplicated = deduplicateJobs(filteredData);
       setJobs(deduplicated);
     } catch (error) {
@@ -228,7 +247,7 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
         .eq("user_id", user.id);
 
       if (error) throw error;
-      setSavedJobIds(new Set(data.map(item => item.job_id)));
+      setSavedJobIds(new Set(data.map((item) => item.job_id)));
     } catch (error) {
       console.error("Error fetching saved jobs:", error);
     }
@@ -286,7 +305,7 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
       setSelectedJobs(new Set());
       setSelectAll(false);
     } else {
-      setSelectedJobs(new Set(currentJobs.map(job => job.id)));
+      setSelectedJobs(new Set(currentJobs.map((job) => job.id)));
       setSelectAll(true);
     }
   };
@@ -305,35 +324,39 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
   const handleClearSelected = async () => {
     const count = selectedJobs.size;
     const jobIdsToDismiss = Array.from(selectedJobs);
-    
+
     try {
       if (user) {
-        // Store dismissed jobs in database for authenticated users
-        const { error } = await supabase
-          .from("dismissed_jobs")
-          .upsert(
-            jobIdsToDismiss.map(jobId => ({
-              user_id: user.id,
-              job_id: jobId,
-            })),
-            { onConflict: 'user_id,job_id' }
-          );
-        
+        const { error } = await supabase.from("dismissed_jobs").upsert(
+          jobIdsToDismiss.map((jobId) => ({
+            user_id: user.id,
+            job_id: jobId,
+          })),
+          { onConflict: "user_id,job_id" },
+        );
+
         if (error) throw error;
       } else {
-        // Store in localStorage for anonymous users
-        const existingDismissed = JSON.parse(localStorage.getItem(DISMISSED_JOBS_KEY) || "[]");
-        const updatedDismissed = [...new Set([...existingDismissed, ...jobIdsToDismiss])];
-        localStorage.setItem(DISMISSED_JOBS_KEY, JSON.stringify(updatedDismissed));
+        const existingDismissed = JSON.parse(
+          localStorage.getItem(DISMISSED_JOBS_KEY) || "[]",
+        );
+        const updatedDismissed = [
+          ...new Set([...existingDismissed, ...jobIdsToDismiss]),
+        ];
+        localStorage.setItem(
+          DISMISSED_JOBS_KEY,
+          JSON.stringify(updatedDismissed),
+        );
       }
-      
-      // Update local state
+
       const newDismissed = new Set([...dismissedJobIds, ...jobIdsToDismiss]);
       setDismissedJobIds(newDismissed);
-      setJobs(prevJobs => prevJobs.filter(job => !selectedJobs.has(job.id)));
+      setJobs((prevJobs) =>
+        prevJobs.filter((job) => !selectedJobs.has(job.id)),
+      );
       setSelectedJobs(new Set());
       setSelectAll(false);
-      
+
       toast({
         title: "Jobs dismissed",
         description: `${count} job(s) removed from results`,
@@ -351,8 +374,11 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
     const url = job.apply_url.toLowerCase().trim();
     const firstSeen = urlFirstSeen.get(url);
     if (!firstSeen) return false;
-    
-    const daysSinceFirstSeen = differenceInDays(new Date(), new Date(firstSeen));
+
+    const daysSinceFirstSeen = differenceInDays(
+      new Date(),
+      new Date(firstSeen),
+    );
     return daysSinceFirstSeen >= 30;
   };
 
@@ -362,13 +388,18 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
   };
 
   if (loading) {
-    return <div className="text-center py-12 text-muted-foreground">Loading jobs...</div>;
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        Loading jobs...
+      </div>
+    );
   }
 
-  // Sort jobs based on selected option
   const sortedJobs = [...jobs].sort((a, b) => {
     if (sortBy === "date") {
-      return new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime();
+      return (
+        new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime()
+      );
     }
     const aStale = isJobStale(a);
     const bStale = isJobStale(b);
@@ -381,9 +412,11 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
   const endIndex = startIndex + jobsPerPage;
   const currentJobs = sortedJobs.slice(startIndex, endIndex);
 
-  const totalDuplicatesMerged = jobs.reduce((sum, job) => sum + job.duplicateCount, 0);
+  const totalDuplicatesMerged = jobs.reduce(
+    (sum, job) => sum + job.duplicateCount,
+    0,
+  );
 
-  // Show empty state for anonymous users who haven't scraped yet
   if (!hasScraped && !user) {
     return (
       <div className="space-y-8">
@@ -393,7 +426,9 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
           </h2>
         </div>
         <div className="text-center py-12 bg-card rounded-lg border border-border">
-          <p className="text-muted-foreground">No jobs found. Click "Scrape Jobs" to get started!</p>
+          <p className="text-muted-foreground">
+            No jobs found. Click "Scrape Jobs" to get started!
+          </p>
         </div>
       </div>
     );
@@ -402,14 +437,13 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
   return (
     <>
       <div className="space-y-8">
-        {/* Scrape Sessions History */}
         {scrapeSessions.length > 0 && (
           <div className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-medium text-sm">Recent Scrapes</h3>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={onClearSessions}
                 className="text-xs text-muted-foreground hover:text-destructive"
               >
@@ -419,12 +453,14 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
             </div>
             <div className="flex flex-wrap gap-2">
               {scrapeSessions.map((session) => (
-                <Badge 
-                  key={session.id} 
-                  variant="secondary" 
+                <Badge
+                  key={session.id}
+                  variant="secondary"
                   className="text-xs py-1 px-2"
                 >
-                  "{session.searchQuery}" - {session.boards.join(', ')} ({session.jobCount} jobs) • {format(new Date(session.timestamp), 'HH:mm')}
+                  "{session.searchQuery}" - {session.boards.join(", ")} (
+                  {session.jobCount} jobs) •{" "}
+                  {format(new Date(session.timestamp), "HH:mm")}
                 </Badge>
               ))}
             </div>
@@ -437,7 +473,10 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
               Results <span className="text-primary">{jobs.length}</span>
             </h2>
             {totalDuplicatesMerged > 0 && (
-              <Badge variant="outline" className="text-blue-600 border-blue-600">
+              <Badge
+                variant="outline"
+                className="text-blue-600 border-blue-600"
+              >
                 {totalDuplicatesMerged} duplicates merged
               </Badge>
             )}
@@ -448,7 +487,9 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
                     checked={selectAll}
                     onCheckedChange={handleSelectAll}
                   />
-                  <span className="text-xs text-muted-foreground">Select all</span>
+                  <span className="text-xs text-muted-foreground">
+                    Select all
+                  </span>
                 </div>
                 {selectedJobs.size > 0 && (
                   <Button
@@ -464,7 +505,10 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
               </div>
             )}
           </div>
-          <Select value={sortBy} onValueChange={(v) => setSortBy(v as "relevance" | "date")}>
+          <Select
+            value={sortBy}
+            onValueChange={(v) => setSortBy(v as "relevance" | "date")}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue />
             </SelectTrigger>
@@ -478,13 +522,15 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
         <div className="space-y-4">
           {jobs.length === 0 ? (
             <div className="text-center py-12 bg-card rounded-lg border border-border">
-              <p className="text-muted-foreground">No jobs found. Click "Scrape Jobs" to get started!</p>
+              <p className="text-muted-foreground">
+                No jobs found. Click "Scrape Jobs" to get started!
+              </p>
             </div>
           ) : (
             currentJobs.map((job) => {
               const stale = isJobStale(job);
               const exported = exportedJobIds.has(job.id);
-              
+
               return (
                 <div
                   key={job.id}
@@ -492,7 +538,7 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
                   onClick={() => handleJobClick(job)}
                 >
                   <div className="flex items-start justify-between gap-4">
-                    <div 
+                    <div
                       className="flex items-center gap-2 flex-shrink-0"
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -504,28 +550,42 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <h3 className="text-xl font-semibold">{job.title}</h3>
-                        <Badge variant="secondary" className="bg-primary/20 text-primary border-0">
+                        <Badge
+                          variant="secondary"
+                          className="bg-primary/20 text-primary border-0"
+                        >
                           {job.source}
                         </Badge>
                         {job.duplicateCount > 0 && (
-                          <Badge variant="outline" className="text-blue-600 border-blue-600">
-                            {job.duplicateCount} duplicate{job.duplicateCount > 1 ? 's' : ''} merged
+                          <Badge
+                            variant="outline"
+                            className="text-blue-600 border-blue-600"
+                          >
+                            {job.duplicateCount} duplicate
+                            {job.duplicateCount > 1 ? "s" : ""} merged
                           </Badge>
                         )}
                         {exported && (
-                          <Badge variant="outline" className="text-green-600 border-green-600 bg-green-50">
+                          <Badge
+                            variant="outline"
+                            className="text-green-600 border-green-600 bg-green-50"
+                          >
                             Exported
                           </Badge>
                         )}
                         {stale && (
-                          <Badge variant="outline" className="text-yellow-600 border-yellow-600 bg-yellow-50">
+                          <Badge
+                            variant="outline"
+                            className="text-yellow-600 border-yellow-600 bg-yellow-50"
+                          >
                             Potentially old job
                           </Badge>
                         )}
                       </div>
-                      
                       <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-                        <span className="font-medium text-foreground">{job.company}</span>
+                        <span className="font-medium text-foreground">
+                          {job.company}
+                        </span>
                         <span className="flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
                           {job.location || "Remote"}
@@ -537,32 +597,39 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
                           </span>
                         )}
                       </div>
-
+                      {/* Description - CLEAN HTML */}
                       {job.description && (
                         <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-                          {job.description.replace(/<[^>]*>/g, '').substring(0, 200)}...
+                          <CleanText html={job.description} maxLength={200} />
                         </p>
                       )}
-
                       <div className="flex flex-wrap gap-2">
                         {job.tags?.slice(0, 5).map((tag, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
+                          <Badge
+                            key={index}
+                            variant="outline"
+                            className="text-xs"
+                          >
                             {tag}
                           </Badge>
                         ))}
                       </div>
                     </div>
-                    
-                    <div 
+
+                    <div
                       className="flex flex-col gap-2 flex-shrink-0"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <Button
-                        variant={savedJobIds.has(job.id) ? "default" : "outline"}
+                        variant={
+                          savedJobIds.has(job.id) ? "default" : "outline"
+                        }
                         size="sm"
                         onClick={() => handleSave(job.id)}
                       >
-                        <Bookmark className={`h-4 w-4 ${savedJobIds.has(job.id) ? "fill-current" : ""}`} />
+                        <Bookmark
+                          className={`h-4 w-4 ${savedJobIds.has(job.id) ? "fill-current" : ""}`}
+                        />
                       </Button>
                       <Button
                         variant="outline"
@@ -584,7 +651,7 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
             >
               Previous
@@ -595,7 +662,7 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
             >
               Next
@@ -605,7 +672,7 @@ export const JobList = ({ scrapeSessions = [], onClearSessions, refreshTrigger }
       </div>
 
       <AuthDialog open={showAuth} onOpenChange={setShowAuth} />
-      
+
       <JobDetailModal
         job={selectedJob}
         open={showJobDetail}
