@@ -1,14 +1,43 @@
 import { Job } from "../types.ts";
 import { sanitizeText, sanitizeUrl } from "../utils.ts";
 
+// RSC (React Server Component) payload line that contains job listings data.
+// Remote.com uses Next.js App Router which embeds data as RSC flight protocol.
+const JOBS_DATA_PATTERN = /^7:\["\$","\$L\d+",null,(\{.*"jobsData":\[.*\].*\})\]$/m;
+
+function formatSalary(comp: any): string | null {
+  if (!comp) return null;
+  const symbol = comp.currency?.symbol?.replace('$$', '$') ?? '';
+  const freq = comp.frequency ?? '';
+  // Remote.com stores amounts in the currency's smallest unit (cents/pence)
+  const fmt = (v: number) => (v / 100).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  if (comp.minimum && comp.maximum) {
+    return `${symbol}${fmt(comp.minimum)} - ${symbol}${fmt(comp.maximum)} ${freq}`.trim();
+  }
+  if (comp.minimum) return `${symbol}${fmt(comp.minimum)}+ ${freq}`.trim();
+  if (comp.maximum) return `Up to ${symbol}${fmt(comp.maximum)} ${freq}`.trim();
+  return null;
+}
+
+function formatLocation(hiringLocation: any): string {
+  if (!hiringLocation) return "Remote";
+  if (hiringLocation.type === "global") return "Remote (Worldwide)";
+  const locs: string[] = (hiringLocation.includedLocations ?? [])
+    .map((l: any) => l.value?.name)
+    .filter(Boolean);
+  return locs.length > 0 ? locs.join(", ") : "Remote";
+}
+
 export async function scrapeRemoteCom(): Promise<Job[]> {
   console.log("[SCRAPER] Fetching Remote.com...");
   try {
+
     const response = await fetch("https://remote.com/jobs", {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept': 'text/x-component',
+        'RSC': '1',
+        'Next-Router-State-Tree': '%5B%22%22%2C%7B%22children%22%3A%5B%22__PAGE__%22%2C%7B%7D%5D%7D%2Cnull%2Cnull%2Ctrue%5D',
       }
     });
 
@@ -17,79 +46,65 @@ export async function scrapeRemoteCom(): Promise<Job[]> {
       return [];
     }
 
-    const html = await response.text();
+    const text = await response.text();
 
-    // Remote.com is a Next.js app — extract the embedded JSON payload
-    const nextDataMatch = /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/.exec(html);
-
-    if (!nextDataMatch?.[1]) {
-      console.log("[SCRAPER] Remote.com: __NEXT_DATA__ not found in page");
+    // Extract the line that contains jobsData
+    const match = JOBS_DATA_PATTERN.exec(text);
+    if (!match?.[1]) {
+      console.log("[SCRAPER] Remote.com: jobsData not found in RSC payload");
       return [];
     }
 
-    let nextData: any;
+    let payload: any;
     try {
-      nextData = JSON.parse(nextDataMatch[1]);
+      payload = JSON.parse(match[1]);
     } catch {
-      console.log("[SCRAPER] Remote.com: Failed to parse __NEXT_DATA__ JSON");
+      console.log("[SCRAPER] Remote.com: Failed to parse jobsData JSON");
       return [];
     }
 
-    const pageProps = nextData?.props?.pageProps;
-
-    // Remote.com may nest jobs under different keys depending on the page version
-    const rawJobs: any[] =
-      pageProps?.jobs ||
-      pageProps?.positions ||
-      pageProps?.data?.jobs ||
-      pageProps?.initialData?.jobs ||
-      pageProps?.listingsData?.jobs ||
-      [];
-
-    if (!Array.isArray(rawJobs) || rawJobs.length === 0) {
-      console.log("[SCRAPER] Remote.com: No jobs found in __NEXT_DATA__. Available keys:", Object.keys(pageProps || {}));
-      return [];
-    }
-
+    // jobsData is an array of categories, each with a `jobs` array
+    const categories: any[] = payload.jobsData ?? [];
+    const seen = new Set<string>();
     const jobs: Job[] = [];
 
-    for (const item of rawJobs.slice(0, 50)) {
-      const title = item.title || item.name || item.position;
-      const companyRaw = item.company?.name || item.company || item.employer_name || item.employer;
-      const rawUrl = item.url || item.apply_url || item.application_url || item.link;
+    for (const category of categories) {
+      for (const item of (category.jobs ?? [])) {
+        if (!item.title || !item.companyProfile?.name) continue;
+        if (seen.has(item.slug)) continue;
+        seen.add(item.slug);
 
-      if (!title || !companyRaw) continue;
+        const rawUrl = item.applyUrl || (item.slug ? `https://remote.com/jobs/position/${item.slug}` : '');
+        const applyUrl = sanitizeUrl(rawUrl);
+        if (!applyUrl) continue;
 
-      const slug = item.slug || item.id;
-      const applyUrl = sanitizeUrl(rawUrl || (slug ? `https://remote.com/jobs/${slug}` : ''));
-      if (!applyUrl) continue;
+        const salary = formatSalary(item.compensation);
+        const location = formatLocation(item.hiringLocation);
 
-      const salary = [item.salary_min, item.salary_max]
-        .filter(Boolean)
-        .map((v: any) => String(v))
-        .join(' - ');
+        const seniority: string[] = (item.seniority ?? [])
+          .map((s: string) => s.replace(/_/g, ' '))
+          .filter(Boolean);
 
-      const tags: string[] = Array.isArray(item.tags)
-        ? item.tags.slice(0, 10).map((t: any) => sanitizeText(String(t), 50) || '').filter(Boolean)
-        : [];
+        jobs.push({
+          title: sanitizeText(item.title, 200) || "Untitled",
+          company: sanitizeText(item.companyProfile.name, 200) || "Unknown",
+          location: sanitizeText(location, 100),
+          description: salary ? `Salary: ${salary}` : null,
+          apply_url: applyUrl,
+          source: "Remote.com",
+          posted_date: item.publishedAt
+            ? new Date(item.publishedAt).toISOString()
+            : new Date().toISOString(),
+          tags: seniority.length > 0 ? seniority : ["Remote"],
+          job_type: sanitizeText(
+            item.employmentType?.replace(/_/g, ' ') ?? null,
+            50
+          ),
+        });
 
-      jobs.push({
-        title: sanitizeText(title, 200) || "Untitled",
-        company: sanitizeText(String(companyRaw), 200) || "Unknown",
-        location: sanitizeText(item.location || item.region || "Remote", 100),
-        description: sanitizeText(
-          [item.description, item.summary, salary ? `Salary: ${salary}` : null]
-            .filter(Boolean)
-            .join('\n\n')
-        ),
-        apply_url: applyUrl,
-        source: "Remote.com",
-        posted_date: item.published_at || item.created_at
-          ? new Date(item.published_at || item.created_at).toISOString()
-          : new Date().toISOString(),
-        tags: tags.length > 0 ? tags : ["Remote"],
-        job_type: sanitizeText(item.job_type || item.employment_type || item.type, 50),
-      });
+        if (jobs.length >= 50) break;
+      }
+      if (jobs.length >= 50) break;
     }
 
     console.log(`[SCRAPER] Remote.com: Found ${jobs.length} jobs`);
