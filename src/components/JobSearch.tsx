@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Search } from "lucide-react";
+import { Search, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -271,15 +271,26 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
           onSelect={selectSearch}
         />
 
-        <Button
-          onClick={handleScrape}
-          disabled={scraping}
-          size="lg"
-          className="w-full md:w-auto bg-primary hover:bg-primary/90"
-        >
-          <Search className="h-4 w-4 mr-2" />
-          {scraping ? "Scraping..." : "Scrape Jobs"}
-        </Button>
+        <div className="flex flex-col gap-2">
+          <Button
+            onClick={handleScrape}
+            disabled={scraping}
+            size="lg"
+            className="w-full md:w-1/4 bg-primary hover:bg-primary/90"
+          >
+            {scraping ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4 mr-2" />
+            )}
+            {scraping ? "Scraping jobs..." : "Scrape Jobs"}
+          </Button>
+          {scraping && (
+            <p className="text-xs text-muted-foreground animate-pulse">
+              Fetching listings from {Array.from(selectedBoards).join(", ")}…
+            </p>
+          )}
+        </div>
       </div>
 
       <AuthDialog open={showAuthDialog} onOpenChange={setShowAuthDialog} />
