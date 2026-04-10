@@ -6,6 +6,7 @@ import {
   Briefcase,
   Trash2,
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import CleanText from "@/components/CleanText";
@@ -389,8 +390,25 @@ export const JobList = ({
 
   if (loading) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        Loading jobs...
+      <div className="space-y-4">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="border border-border rounded-lg p-5 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-2 flex-1">
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="h-4 w-1/3" />
+              </div>
+              <Skeleton className="h-8 w-20 shrink-0" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-14" />
+            </div>
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+          </div>
+        ))}
       </div>
     );
   }
