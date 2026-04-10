@@ -42,7 +42,6 @@ export async function scrapeRemoteCom(): Promise<Job[]> {
     });
 
     if (!response.ok) {
-      console.log(`[SCRAPER] Remote.com responded with status: ${response.status}`);
       return [];
     }
 
@@ -51,7 +50,6 @@ export async function scrapeRemoteCom(): Promise<Job[]> {
     // Extract the line that contains jobsData
     const match = JOBS_DATA_PATTERN.exec(text);
     if (!match?.[1]) {
-      console.log("[SCRAPER] Remote.com: jobsData not found in RSC payload");
       return [];
     }
 
@@ -59,7 +57,6 @@ export async function scrapeRemoteCom(): Promise<Job[]> {
     try {
       payload = JSON.parse(match[1]);
     } catch {
-      console.log("[SCRAPER] Remote.com: Failed to parse jobsData JSON");
       return [];
     }
 
@@ -107,10 +104,8 @@ export async function scrapeRemoteCom(): Promise<Job[]> {
       if (jobs.length >= 50) break;
     }
 
-    console.log(`[SCRAPER] Remote.com: Found ${jobs.length} jobs`);
     return jobs;
   } catch (error) {
-    console.error("[SCRAPER] Remote.com error:", error);
     return [];
   }
 }
