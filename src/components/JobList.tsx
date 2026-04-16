@@ -119,6 +119,13 @@ export const JobList = ({
     }
   }, [refreshTrigger]);
 
+  // Reset to full jobs list when scrapeSessions is cleared
+  useEffect(() => {
+    if (scrapeSessions.length === 0) {
+      fetchJobs(); // reset to full list
+    }
+  }, [scrapeSessions]);
+
   useEffect(() => {
     if (!user) return;
 
@@ -218,6 +225,9 @@ export const JobList = ({
   const fetchJobs = async () => {
     setLoading(true);
     try {
+      // Get latest session
+      const latestSession = scrapeSessions[0];
+
       const { data, error } = await supabase
         .from("jobs")
         .select("*")
@@ -226,9 +236,37 @@ export const JobList = ({
 
       if (error) throw error;
 
-      const filteredData = (data || []).filter(
+      // Apply filtering
+      let filteredData = (data || []).filter(
         (job) => !dismissedJobIds.has(job.id),
       );
+
+      // Apply search filtering ONLY if user scraped
+      if (latestSession) {
+        const keyword = latestSession.searchQuery?.toLowerCase();
+
+        filteredData = filteredData.filter((job) => {
+          // ✅ STRICT filtering: Only match keyword in job title
+          const matchesKeyword =
+            !keyword || job.title?.toLowerCase().includes(keyword);
+
+          // Optional: Also check tags for better accuracy without being too loose
+          // Uncomment the line below if you want to include tag matching
+          // const matchesKeywordInTags = job.tags?.some(tag =>
+          //   tag.toLowerCase().includes(keyword)
+          // );
+          // const matchesKeyword = !keyword ||
+          //   job.title?.toLowerCase().includes(keyword) ||
+          //   matchesKeywordInTags;
+
+          const matchesBoard =
+            !latestSession.boards?.length ||
+            latestSession.boards.includes(job.source);
+
+          return matchesKeyword && matchesBoard;
+        });
+      }
+
       const deduplicated = deduplicateJobs(filteredData);
       setJobs(deduplicated);
     } catch (error) {
@@ -392,7 +430,10 @@ export const JobList = ({
     return (
       <div className="space-y-4">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="border border-border rounded-lg p-5 space-y-3">
+          <div
+            key={i}
+            className="border border-border rounded-lg p-5 space-y-3"
+          >
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-2 flex-1">
                 <Skeleton className="h-5 w-2/3" />
@@ -478,7 +519,7 @@ export const JobList = ({
                 >
                   "{session.searchQuery}" - {session.boards.join(", ")} (
                   {session.jobCount} jobs) •{" "}
-                  {format(new Date(session.timestamp), "HH:mm")}
+                  {format(new Date(session.timestamp), "hh:mm a")}
                 </Badge>
               ))}
             </div>
