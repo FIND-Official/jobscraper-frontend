@@ -12,7 +12,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import Account from "./pages/Account";
 import ResetPassword from "./pages/ResetPassword";
-import Auth from "./pages/Auth"; // 👈 ADD THIS
+import Auth from "./pages/Auth"; 
 
 const queryClient = new QueryClient();
 
@@ -25,7 +25,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<Auth />} /> {/* 👈 AUTH PAGE */}
+            <Route path="/auth" element={<Auth />} /> 
             <Route path="/account" element={<Account />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsOfService />} />
