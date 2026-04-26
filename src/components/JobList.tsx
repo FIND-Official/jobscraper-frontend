@@ -121,8 +121,8 @@ export const JobList = ({
 
   // Reset to full jobs list when scrapeSessions is cleared
   useEffect(() => {
-    if (scrapeSessions.length === 0) {
-      fetchJobs(); // reset to full list
+    if (!scrapeSessions || scrapeSessions.length === 0) {
+      fetchJobs();
     }
   }, [scrapeSessions]);
 
@@ -226,13 +226,13 @@ export const JobList = ({
     setLoading(true);
     try {
       // Get latest session
-      const latestSession = scrapeSessions[0];
+      const latestSession = scrapeSessions[0] || null;
 
       const { data, error } = await supabase
         .from("jobs")
         .select("*")
         .order("scraped_at", { ascending: false })
-        .limit(500);
+        .limit(100);
 
       if (error) throw error;
 
@@ -243,7 +243,10 @@ export const JobList = ({
 
       // Apply search filtering ONLY if user scraped
       if (latestSession) {
-        const keyword = latestSession.searchQuery?.toLowerCase();
+        const keyword =
+          latestSession.searchQuery?.toLowerCase() === "all jobs"
+            ? ""
+            : latestSession.searchQuery?.toLowerCase();
 
         filteredData = filteredData.filter((job) => {
           // ✅ STRICT filtering: Only match keyword in job title
@@ -261,7 +264,10 @@ export const JobList = ({
 
           const matchesBoard =
             !latestSession.boards?.length ||
-            latestSession.boards.includes(job.source);
+            latestSession.boards.some(
+              (board) =>
+                board.toLowerCase().trim() === job.source?.toLowerCase().trim(),
+            );
 
           return matchesKeyword && matchesBoard;
         });
@@ -269,6 +275,7 @@ export const JobList = ({
 
       const deduplicated = deduplicateJobs(filteredData);
       setJobs(deduplicated);
+      setCurrentPage(1);
     } catch (error) {
       console.error("Error fetching jobs:", error);
     } finally {
@@ -391,7 +398,7 @@ export const JobList = ({
       const newDismissed = new Set([...dismissedJobIds, ...jobIdsToDismiss]);
       setDismissedJobIds(newDismissed);
       setJobs((prevJobs) =>
-        prevJobs.filter((job) => !selectedJobs.has(job.id)),
+        prevJobs.filter((job) => !jobIdsToDismiss.includes(job.id)),
       );
       setSelectedJobs(new Set());
       setSelectAll(false);
