@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { AuthDialog } from "./AuthDialog";
 import { JobBoardTooltip } from "./JobBoardTooltip";
 import { SavedSearchTags } from "./SavedSearchTags";
+import { useNavigate } from "react-router-dom";
 
 interface ScrapeResult {
   id: string;
@@ -33,7 +34,6 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
     new Set(["We Work Remotely"])
   );
   const [scrapeCount, setScrapeCount] = useState(0);
-  const [showAuthDialog, setShowAuthDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [experienceLevel, setExperienceLevel] = useState("any");
   const [savedSearches, setSavedSearches] = useState<string[]>([]);
@@ -41,10 +41,12 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
   const isPro = subscriptionTier === "pro";
   const maxBoards = isPro ? 4 : 2;
 
+  const navigate = useNavigate();
+
   useEffect(() => {
     const count = parseInt(localStorage.getItem("anonymousScrapeCount") || "0");
     setScrapeCount(count);
-    
+
     // Load saved searches from localStorage
     const saved = localStorage.getItem("savedSearches");
     if (saved) {
@@ -67,7 +69,7 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
       if (newSelected.size >= maxBoards) {
         toast({
           title: "Board limit reached",
-          description: isPro 
+          description: isPro
             ? "Pro plan users can select up to 4 boards."
             : "Free plan users can select up to 2 boards. Upgrade to Pro for up to 4 boards.",
           variant: "destructive",
@@ -81,10 +83,10 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
 
   const saveSearch = (query: string) => {
     if (!query.trim()) return;
-    
+
     const normalizedQuery = query.trim();
     if (savedSearches.includes(normalizedQuery)) return;
-    
+
     const newSearches = [normalizedQuery, ...savedSearches].slice(0, MAX_SAVED_SEARCHES);
     setSavedSearches(newSearches);
     localStorage.setItem("savedSearches", JSON.stringify(newSearches));
@@ -108,7 +110,7 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
           description: "You've reached your limit. Sign up to continue scraping jobs!",
           variant: "destructive",
         });
-        setShowAuthDialog(true);
+        navigate("/auth");
         return;
       }
     }
@@ -130,24 +132,24 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
     setScraping(true);
     try {
       const boardsArray = Array.from(selectedBoards);
-      
+
       // Include auth header if user is logged in
       const headers: Record<string, string> = {};
       if (session?.access_token) {
         headers.Authorization = `Bearer ${session.access_token}`;
       }
-      
+
       const { data, error } = await supabase.functions.invoke("scrape-jobs", {
         headers,
-        body: { 
+        body: {
           boards: boardsArray,
           searchQuery: searchQuery.trim() || undefined,
           experienceLevel: experienceLevel !== "any" ? experienceLevel : undefined,
         }
       });
-      
+
       if (error) throw error;
-      
+
       // Check for board limit error
       if (data?.code === "BOARD_LIMIT_EXCEEDED") {
         toast({
@@ -157,13 +159,13 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
         });
         return;
       }
-      
+
       if (!user) {
         const newCount = scrapeCount + 1;
         setScrapeCount(newCount);
         localStorage.setItem("anonymousScrapeCount", newCount.toString());
       }
-      
+
       const scrapeResult: ScrapeResult = {
         id: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
@@ -171,14 +173,14 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
         boards: boardsArray,
         jobCount: data?.count || 0,
       };
-      
+
       toast({
         title: "Jobs scraped!",
         description: `Found ${data?.count || 0} remote jobs from ${boardsArray.length} board(s)`,
       });
-      
+
       onScrapeComplete?.(scrapeResult);
-      
+
     } catch (error: any) {
       toast({
         title: "Error",
@@ -237,8 +239,8 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <Label className="text-sm mb-2 block">Search</Label>
-            <Input 
-              placeholder="e.g., designer, developer..." 
+            <Input
+              placeholder="e.g., designer, developer..."
               className="bg-card"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -265,7 +267,7 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
           </div>
         </div>
 
-        <SavedSearchTags 
+        <SavedSearchTags
           savedSearches={savedSearches}
           onRemove={removeSearch}
           onSelect={selectSearch}
@@ -292,8 +294,6 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
           )}
         </div>
       </div>
-
-      <AuthDialog open={showAuthDialog} onOpenChange={setShowAuthDialog} />
     </div>
   );
 };
