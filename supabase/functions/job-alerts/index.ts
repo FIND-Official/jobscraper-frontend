@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.84.0";
 import { crypto } from "https://deno.land/std@0.190.0/crypto/mod.ts";
@@ -57,8 +58,8 @@ function mapBoardIdsToSources(boardIds: string[]): string[] {
 }
 
 function getFrequencyHours(frequency: string): number {
-  switch (frequency) {
-    case "daily": return 24;
+   switch (frequency) {
+    case "daily": return 6;
     case "weekly": return 168;
     case "monthly": return 720;
     default: return 24;
