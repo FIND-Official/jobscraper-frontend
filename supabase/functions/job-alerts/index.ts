@@ -57,6 +57,7 @@ function mapBoardIdsToSources(boardIds: string[]): string[] {
   return boardIds.map(id => BOARD_ID_TO_SOURCE[id] || id);
 }
 
+
 function getFrequencyHours(frequency: string): number {
    switch (frequency) {
     case "daily": return 6;
