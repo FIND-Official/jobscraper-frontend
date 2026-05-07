@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { ContactDialog } from "./ContactDialog";
+import { Twitter, Linkedin } from "lucide-react";
 
 export const Footer = () => {
   const [showContact, setShowContact] = useState(false);
@@ -69,6 +70,36 @@ export const Footer = () => {
                 >
                   Terms
                 </Link>
+
+                <Link
+  to="/terms"
+  className="text-muted-foreground hover:text-primary transition-colors"
+>
+  Terms
+</Link>
+
+{/* Social Media Icons */}
+<div className="flex items-center gap-4">
+  <a
+    href="https://x.com/_findservices"
+    target="_blank"
+    rel="noopener noreferrer"
+    aria-label="Twitter"
+    className="text-muted-foreground hover:text-primary transition-colors"
+  >
+    <Twitter className="h-5 w-5" />
+  </a>
+
+  <a
+    href="https://www.linkedin.com/company/find-services/"
+    target="_blank"
+    rel="noopener noreferrer"
+    aria-label="LinkedIn"
+    className="text-muted-foreground hover:text-primary transition-colors"
+  >
+    <Linkedin className="h-5 w-5" />
+  </a>
+</div>
               </div>
 
             </div>
