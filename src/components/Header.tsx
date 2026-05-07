@@ -1,4 +1,4 @@
-import { Twitter, Linkedin, LogIn } from "lucide-react";
+import {  LogIn } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -35,25 +35,7 @@ export const Header = () => {
         </div>
 
         {/* Right section */}
-        <div className="flex items-center gap-2 sm:gap-4">
-          <a
-            href="https://x.com/_findservices"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-primary transition-colors"
-          >
-            <Twitter className="h-5 w-5 sm:h-6 sm:w-6" />
-          </a>
-
-          <a
-            href="https://www.linkedin.com/company/find-services/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-primary transition-colors"
-          >
-            <Linkedin className="h-5 w-5 sm:h-6 sm:w-6" />
-          </a>
-
+         <div className="flex items-center">
           {user ? (
             <ProfileDropdown />
           ) : (
