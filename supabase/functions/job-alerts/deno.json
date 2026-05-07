@@ -1,0 +1,14 @@
+{
+  "tasks": {
+    "serve": "deno run --allow-net --allow-env --allow-read ./index.ts"
+  },
+  "imports": {
+    "std/": "https://deno.land/std@0.190.0/",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.84.0"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window"],
+    "strict": true,
+    "esModuleInterop": true
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "tasks": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "imports": {
+    "std/": "https://deno.land/std@0.190.0/",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.84.0"
+  }
+}
