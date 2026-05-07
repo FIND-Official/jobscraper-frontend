@@ -1,0 +1,26 @@
+name: Scheduled Job Scraping and Notifications
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  scrape-and-notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Scrape Jobs
+        run: |
+          curl -X POST '${{ secrets.SUPABASE_URL }}/functions/v1/scrape-jobs' \
+            -H 'Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}' \
+            -H 'Content-Type: application/json' \
+            -d '{}'
+
+      - name: Send Notifications
+        run: |
+          curl -X POST '${{ secrets.SUPABASE_URL }}/functions/v1/job-alerts' \
+            -H 'Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}' \
+            -H 'Content-Type: application/json' \
+            -d '{}'
