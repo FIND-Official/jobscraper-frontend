@@ -51,11 +51,18 @@ const BOARD_ID_TO_SOURCE: Record<string, string> = {
   "weworkremotely": "We Work Remotely",
   "remoteok": "RemoteOK", 
   "workingnomads": "Working Nomads",
+  "remotecom": "Remote.com",
 };
 
 function mapBoardIdsToSources(boardIds: string[]): string[] {
   return boardIds.map(id => BOARD_ID_TO_SOURCE[id] || id);
 }
+
+const EXPERIENCE_FILTERS: Record<string, string[]> = {
+  junior: ["junior", "entry", "jr", "associate", "intern", "graduate"],
+  mid: ["mid", "intermediate", "2-5 years", "3+ years", "mid-level"],
+  senior: ["senior", "sr", "lead", "principal", "staff", "5+ years", "architect"],
+};
 
 function getFrequencyHours(frequency: string): number {
    switch (frequency) {
@@ -65,6 +72,38 @@ function getFrequencyHours(frequency: string): number {
     default: return 24;
   }
 }
+
+function escapeKeyword(value: string): string {
+  return value.replace(/[%_]/g, "\\$&");
+}
+
+function applyPreferenceFilters(query: any, pref: NotificationPreference) {
+  if (pref.search_keyword) {
+    const keyword = escapeKeyword(pref.search_keyword.trim());
+    query = query.or(
+      `title.ilike.%${keyword}%,company.ilike.%${keyword}%,location.ilike.%${keyword}%,source.ilike.%${keyword}%`
+    );
+  }
+
+  if (pref.experience_level) {
+    const keywords = EXPERIENCE_FILTERS[pref.experience_level] || [];
+    if (keywords.length > 0) {
+      const clauses = keywords
+        .map(k => `title.ilike.%${escapeKeyword(k)}%`)
+        .join(",");
+      query = query.or(clauses);
+    }
+  }
+
+  if (pref.job_boards && pref.job_boards.length > 0) {
+    const sourceNames = mapBoardIdsToSources(pref.job_boards);
+    console.log(`[JOB-ALERTS] Filtering by sources: ${sourceNames.join(", ")}`);
+    query = query.in("source", sourceNames);
+  }
+
+  return query;
+}
+
 
 function shouldSendAlert(preference: NotificationPreference, forceTest: boolean = false): boolean {
   if (forceTest) return true;
@@ -418,26 +457,18 @@ serve(async (req: Request): Promise<Response> => {
 
       console.log(`[JOB-ALERTS] Looking for jobs since ${cutoffDate.toISOString()}`);
 
-      let jobsQuery = supabase
-        .from("jobs")
-        .select("id, title, company, location, source, apply_url, scraped_at")
-        .gt("scraped_at", cutoffDate.toISOString())
-        .order("scraped_at", { ascending: false })
-        .limit(50);
+      function buildJobQuery(cutoff: string) {
+        let query = supabase
+          .from("jobs")
+          .select("id, title, company, location, source, apply_url, scraped_at")
+          .gt("scraped_at", cutoff)
+          .order("scraped_at", { ascending: false });
 
-      // Apply keyword filter if set
-      if (pref.search_keyword) {
-        jobsQuery = jobsQuery.or(`title.ilike.%${pref.search_keyword}%,company.ilike.%${pref.search_keyword}%`);
+        query = applyPreferenceFilters(query, pref);
+        return query.limit(50);
       }
 
-      // Apply source filter if specific boards are set
-      if (pref.job_boards && pref.job_boards.length > 0) {
-        const sourceNames = mapBoardIdsToSources(pref.job_boards);
-        console.log(`[JOB-ALERTS] Filtering by sources: ${sourceNames.join(", ")}`);
-        jobsQuery = jobsQuery.in("source", sourceNames);
-      }
-
-      const { data: jobs, error: jobsError } = await jobsQuery;
+      const { data: jobs, error: jobsError } = await buildJobQuery(cutoffDate.toISOString());
 
       if (jobsError) {
         const msg = `Error fetching jobs for user ${pref.user_id}: ${jobsError.message}`;
@@ -447,7 +478,25 @@ serve(async (req: Request): Promise<Response> => {
         continue;
       }
 
-      if (!jobs || jobs.length === 0) {
+      let filteredJobs = jobs || [];
+      if (filteredJobs.length < 10) {
+        const fallbackDate = new Date();
+        fallbackDate.setDate(fallbackDate.getDate() - 30);
+        console.log(`[JOB-ALERTS] Only ${filteredJobs.length} jobs found; widening search to ${fallbackDate.toISOString()}`);
+        const { data: fallbackJobs, error: fallbackError } = await buildJobQuery(fallbackDate.toISOString());
+
+        if (fallbackError) {
+          const msg = `Fallback fetch error for user ${pref.user_id}: ${fallbackError.message}`;
+          console.error(`[JOB-ALERTS] ${msg}`);
+          details.push(msg);
+          errors++;
+          continue;
+        }
+
+        filteredJobs = fallbackJobs || filteredJobs;
+      }
+
+      if (!filteredJobs || filteredJobs.length === 0) {
         const msg = `No new jobs for ${profile.email} since ${cutoffDate.toISOString()}`;
         console.log(`[JOB-ALERTS] ${msg}`);
         details.push(msg);
@@ -462,12 +511,13 @@ serve(async (req: Request): Promise<Response> => {
         continue;
       }
 
-      console.log(`[JOB-ALERTS] Found ${jobs.length} jobs for ${profile.email}`);
+      const jobsToSend = filteredJobs.slice(0, 10);
+      console.log(`[JOB-ALERTS] Sending ${jobsToSend.length} jobs for ${profile.email}`);
 
       // Send email via Mailchimp
       const sent = await sendJobAlertViaMailchimp(
         profile.email,
-        jobs as Job[],
+        jobsToSend,
         pref.search_keyword,
         mailchimpApiKey,
         audienceId
@@ -475,7 +525,7 @@ serve(async (req: Request): Promise<Response> => {
 
       if (sent) {
         emailsSent++;
-        details.push(`Email sent to ${profile.email} with ${jobs.length} jobs`);
+        details.push(`Email sent to ${profile.email} with ${jobsToSend.length} jobs`);
         // Update last_sent_at
         await supabase
           .from("notification_preferences")
