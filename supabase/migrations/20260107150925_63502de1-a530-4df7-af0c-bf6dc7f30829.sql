@@ -14,7 +14,7 @@ SELECT cron.schedule(
   SELECT net.http_post(
     url := 'https://ydvmulhmmragakuimuqm.supabase.co/functions/v1/scrape-jobs',
     headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlkdm11bGhtbXJhZ2FrdWltdXFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5OTk1NzksImV4cCI6MjA3OTU3NTU3OX0.YozlONF8m9qE25xNSSk-s7xIqBEEV0LPB90oGVcS-10"}'::jsonb,
-    body := '{"boards": ["We Work Remotely", "RemoteOK"], "searchQuery": ""}'::jsonb
+    body := '{"boards": ["We Work Remotely", "RemoteOK", "Working Nomads", "Remote.com"], "searchQuery": ""}'::jsonb
   ) AS request_id;
   $$
 );
