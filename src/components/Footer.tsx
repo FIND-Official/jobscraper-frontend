@@ -20,6 +20,30 @@ export const Footer = () => {
                 <div>© 2025 JobScraper. All rights reserved.</div>
               </div>
 
+              
+{/* Social Media Icons */}
+<div className="flex items-center gap-4">
+  <a
+    href="https://x.com/_findservices"
+    target="_blank"
+    rel="noopener noreferrer"
+    aria-label="Twitter"
+    className="text-muted-foreground hover:text-primary transition-colors"
+  >
+    <Twitter className="h-5 w-5" />
+  </a>
+
+  <a
+    href="https://www.linkedin.com/company/find-services/"
+    target="_blank"
+    rel="noopener noreferrer"
+    aria-label="LinkedIn"
+    className="text-muted-foreground hover:text-primary transition-colors"
+  >
+    <Linkedin className="h-5 w-5" />
+  </a>
+</div>
+
               <div className="hidden md:block h-10 w-px bg-border" />
 
               <div className="flex flex-wrap justify-center md:justify-start gap-x-6 gap-y-3 text-sm">
@@ -78,28 +102,7 @@ export const Footer = () => {
   Terms
 </Link>
 
-{/* Social Media Icons */}
-<div className="flex items-center gap-4">
-  <a
-    href="https://x.com/_findservices"
-    target="_blank"
-    rel="noopener noreferrer"
-    aria-label="Twitter"
-    className="text-muted-foreground hover:text-primary transition-colors"
-  >
-    <Twitter className="h-5 w-5" />
-  </a>
 
-  <a
-    href="https://www.linkedin.com/company/find-services/"
-    target="_blank"
-    rel="noopener noreferrer"
-    aria-label="LinkedIn"
-    className="text-muted-foreground hover:text-primary transition-colors"
-  >
-    <Linkedin className="h-5 w-5" />
-  </a>
-</div>
               </div>
 
             </div>
