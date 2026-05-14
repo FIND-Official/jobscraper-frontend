@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -8,10 +8,9 @@ import { Search, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { AuthDialog } from "./AuthDialog";
+import { useNavigate } from "react-router-dom";
 import { JobBoardTooltip } from "./JobBoardTooltip";
 import { SavedSearchTags } from "./SavedSearchTags";
-import { useNavigate } from "react-router-dom";
 
 interface ScrapeResult {
   id: string;
@@ -26,6 +25,18 @@ interface JobSearchProps {
 }
 
 const MAX_SAVED_SEARCHES = 5;
+const ANONYMOUS_SCRAPE_LIMIT = 2;
+
+const getAnonymousId = () => {
+  let id = localStorage.getItem("anonymous_id");
+
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("anonymous_id", id);
+  }
+
+  return id;
+};
 
 export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
   const { user, session, subscriptionTier } = useAuth();
@@ -41,25 +52,14 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
   const isPro = subscriptionTier === "pro";
   const maxBoards = isPro ? 4 : 2;
 
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const count = parseInt(localStorage.getItem("anonymousScrapeCount") || "0");
-    setScrapeCount(count);
-
-    // Load saved searches from localStorage
-    const saved = localStorage.getItem("savedSearches");
-    if (saved) {
-      setSavedSearches(JSON.parse(saved));
-    }
-  }, []);
-
   const jobBoards = [
     { id: "wwr", name: "We Work Remotely" },
     { id: "remoteok", name: "RemoteOK" },
     { id: "remote", name: "Remote.com" },
     { id: "workingnomads", name: "Working Nomads" },
   ];
+
+  const navigate = useNavigate();
 
   const toggleBoard = (boardName: string) => {
     const newSelected = new Set(selectedBoards);
@@ -89,13 +89,11 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
 
     const newSearches = [normalizedQuery, ...savedSearches].slice(0, MAX_SAVED_SEARCHES);
     setSavedSearches(newSearches);
-    localStorage.setItem("savedSearches", JSON.stringify(newSearches));
   };
 
   const removeSearch = (search: string) => {
     const newSearches = savedSearches.filter((s) => s !== search);
     setSavedSearches(newSearches);
-    localStorage.setItem("savedSearches", JSON.stringify(newSearches));
   };
 
   const selectSearch = (search: string) => {
@@ -103,18 +101,6 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
   };
 
   const handleScrape = async () => {
-    if (!user) {
-      if (scrapeCount >= 2) {
-        toast({
-          title: "Sign up required",
-          description: "You've reached your limit. Sign up to continue scraping jobs!",
-          variant: "destructive",
-        });
-        navigate("/auth");
-        return;
-      }
-    }
-
     if (selectedBoards.size === 0) {
       toast({
         title: "Select job boards",
@@ -142,28 +128,46 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
       const { data, error } = await supabase.functions.invoke("scrape-jobs", {
         headers,
         body: {
+          anonymousId: getAnonymousId(),
           boards: boardsArray,
           searchQuery: searchQuery.trim() || undefined,
           experienceLevel: experienceLevel !== "any" ? experienceLevel : undefined,
-        }
+        },
       });
 
-      if (error) throw error;
+      if (error) {
+        const context = error.context ? await error.context.json().catch(() => null) : null;
 
-      // Check for board limit error
-      if (data?.code === "BOARD_LIMIT_EXCEEDED") {
-        toast({
-          title: "Board limit exceeded",
-          description: data.error,
-          variant: "destructive",
-        });
-        return;
+        if (context?.code === "ANONYMOUS_LIMIT_REACHED") {
+          toast({
+            title: "Sign up required",
+            description: context.error || "You've reached your anonymous scrape limit. Sign up to continue.",
+            variant: "destructive",
+          });
+
+          navigate("/auth");
+
+          setScrapeCount(context.anonymousScrapeCount ?? ANONYMOUS_SCRAPE_LIMIT);
+
+          return;
+        }
+
+        if (context?.code === "BOARD_LIMIT_EXCEEDED") {
+          toast({
+            title: "Board limit exceeded",
+            description: context.error,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        throw error;
       }
 
-      if (!user) {
-        const newCount = scrapeCount + 1;
-        setScrapeCount(newCount);
-        localStorage.setItem("anonymousScrapeCount", newCount.toString());
+      console.log("Scrape data:", data);
+
+      if (!user && data?.anonymousScrapeCount !== undefined) {
+        setScrapeCount(data.anonymousScrapeCount);
       }
 
       const scrapeResult: ScrapeResult = {
@@ -201,9 +205,9 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
         <p className="text-muted-foreground">
           Select job boards, use filters and scrape the latest remote opportunities in one place.
         </p>
-        {!user && scrapeCount > 0 && scrapeCount < 2 && (
+        {!user && (
           <p className="text-xs text-muted-foreground mt-2">
-            Anonymous scrapes remaining: {2 - scrapeCount}
+            Anonymous scrapes remaining: {Math.max(0, ANONYMOUS_SCRAPE_LIMIT - scrapeCount)}
           </p>
         )}
         {user && (
