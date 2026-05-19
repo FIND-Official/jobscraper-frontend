@@ -95,14 +95,6 @@ export const Footer = () => {
                   Terms
                 </Link>
 
-                <Link
-  to="/terms"
-  className="text-muted-foreground hover:text-primary transition-colors"
->
-  Terms
-</Link>
-
-
               </div>
 
             </div>
