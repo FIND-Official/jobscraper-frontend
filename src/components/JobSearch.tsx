@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,12 +16,14 @@ interface ScrapeResult {
   id: string;
   timestamp: string;
   searchQuery: string;
+  experienceLevel?: string;
   boards: string[];
   jobCount: number;
 }
 
 interface JobSearchProps {
   onScrapeComplete?: (result: ScrapeResult) => void;
+  clearFiltersTrigger?: number;
 }
 
 const MAX_SAVED_SEARCHES = 5;
@@ -38,7 +40,10 @@ const getAnonymousId = () => {
   return id;
 };
 
-export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
+export const JobSearch = ({
+  onScrapeComplete,
+  clearFiltersTrigger = 0,
+}: JobSearchProps) => {
   const { user, session, subscriptionTier } = useAuth();
   const [scraping, setScraping] = useState(false);
   const [selectedBoards, setSelectedBoards] = useState<Set<string>>(
@@ -60,6 +65,12 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
   ];
 
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (clearFiltersTrigger <= 0) return;
+    setSearchQuery("");
+    setExperienceLevel("any");
+  }, [clearFiltersTrigger]);
 
   const toggleBoard = (boardName: string) => {
     const newSelected = new Set(selectedBoards);
@@ -174,14 +185,10 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
         id: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
         searchQuery: searchQuery.trim() || "All Jobs",
+        experienceLevel: experienceLevel !== "any" ? experienceLevel : undefined,
         boards: boardsArray,
-        jobCount: data?.count || 0,
+        jobCount: 0,
       };
-
-      toast({
-        title: "Jobs scraped!",
-        description: `Found ${data?.count || 0} remote jobs from ${boardsArray.length} board(s)`,
-      });
 
       onScrapeComplete?.(scrapeResult);
 
@@ -293,7 +300,7 @@ export const JobSearch = ({ onScrapeComplete }: JobSearchProps) => {
           </Button>
           {scraping && (
             <p className="text-xs text-muted-foreground animate-pulse">
-              Fetching listings from {Array.from(selectedBoards).join(", ")}…
+              Fetching listings from {Array.from(selectedBoards).join(", ")}...
             </p>
           )}
         </div>
