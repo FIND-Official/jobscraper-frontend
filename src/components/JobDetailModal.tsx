@@ -8,7 +8,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import CleanText from "@/components/CleanText";
-import DOMPurify from "dompurify";
 import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
@@ -282,7 +281,7 @@ export const JobDetailModal = ({
           {/* Description - CLEAN HTML */}
           <div>
             <h4 className="font-semibold mb-2">Description</h4>
-            <div className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+            <div>
               <CleanText html={job.description} />
             </div>
           </div>

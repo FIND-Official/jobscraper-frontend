@@ -1,10 +1,12 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Check, RefreshCw } from "lucide-react";
+import { Check } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { PaystackPayment } from "@/components/PaystackPayment";
+import { supabase } from "@/integrations/supabase/client";
 
 interface PricingDialogProps {
   open: boolean;
@@ -12,36 +14,24 @@ interface PricingDialogProps {
 }
 
 export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
-  const { user, session, subscriptionTier, checkSubscription } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const {
+    user,
+    session,
+    subscriptionTier,
+    subscriptionEnd,
+    subscriptionCancelAtPeriodEnd,
+    checkSubscription,
+  } = useAuth();
+  const navigate = useNavigate();
+  const [downgrading, setDowngrading] = useState(false);
   const isPro = subscriptionTier === "pro";
 
-  // Check subscription when dialog opens (user returning from Stripe)
+  // Check subscription when dialog opens so Paystack activations are reflected.
   useEffect(() => {
     if (open && user) {
       checkSubscription();
     }
   }, [open, user, checkSubscription]);
-
-  const handleRefreshStatus = async () => {
-    setRefreshing(true);
-    try {
-      await checkSubscription();
-      toast({
-        title: "Status updated",
-        description: "Your subscription status has been refreshed",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to refresh subscription status",
-        variant: "destructive",
-      });
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   const handleUpgrade = async () => {
     if (!user || !session) {
@@ -50,53 +40,64 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
         description: "Please sign in to upgrade",
         variant: "destructive",
       });
+      onOpenChange(false);
+      navigate("/auth?mode=signup");
+      return;
+    }
+  };
+
+  const closeBeforePaystackOpen = async () => {
+    onOpenChange(false);
+    await new Promise((resolve) => window.setTimeout(resolve, 300));
+  };
+
+  const handleDowngrade = async () => {
+    if (!session?.access_token) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in again to manage your plan.",
+        variant: "destructive",
+      });
+      onOpenChange(false);
+      navigate("/auth?mode=signup");
       return;
     }
 
-    setLoading(true);
+    setDowngrading(true);
+
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
+      const { data, error } = await supabase.functions.invoke("cancel-subscription", {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
       });
 
       if (error) throw error;
-      if (data?.url) {
-        window.open(data.url, "_blank");
+      if (!data?.success) {
+        throw new Error(data?.error || "Unable to cancel your Pro plan.");
       }
+
+      const endDate = data.subscription_end || subscriptionEnd;
+      const readableEndDate = endDate ? new Date(endDate).toLocaleDateString(undefined, {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }) : "the end of your current period";
+
+      toast({
+        title: "Pro plan cancelled",
+        description: `You can still use Pro until ${readableEndDate}. After that, your account will change to Free.`,
+      });
+
+      await checkSubscription();
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to create checkout session",
+        title: "Could not cancel Pro",
+        description: error.message || "Please try again.",
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleManageSubscription = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("customer-portal", {
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-      if (data?.url) {
-        window.open(data.url, "_blank");
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to open billing portal",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+      setDowngrading(false);
     }
   };
 
@@ -104,18 +105,7 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-2xl">Choose Your Plan</DialogTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRefreshStatus}
-              disabled={refreshing}
-              className="h-8 w-8 p-0"
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
+          <DialogTitle className="text-2xl">Choose Your Plan</DialogTitle>
         </DialogHeader>
 
         <div className="grid md:grid-cols-2 gap-6 mt-6">
@@ -147,11 +137,11 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
             {isPro ? (
               <Button
                 variant="outline"
-                className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                onClick={handleManageSubscription}
-                disabled={loading}
+                className="w-full"
+                onClick={handleDowngrade}
+                disabled={downgrading || subscriptionCancelAtPeriodEnd}
               >
-                {loading ? "Loading..." : "Downgrade"}
+                {subscriptionCancelAtPeriodEnd ? "Pro ending" : downgrading ? "Cancelling..." : "Cancel Pro"}
               </Button>
             ) : (
               <Button
@@ -203,23 +193,29 @@ export const PricingDialog = ({ open, onOpenChange }: PricingDialogProps) => {
               >
                 Current Plan
               </Button>
+            ) : user && session ? (
+              <PaystackPayment
+                email={user.email || ""}
+                amount={20}
+                planName="Pro"
+                buttonText="Upgrade to Pro"
+                className="w-full"
+                onBeforeOpen={closeBeforePaystackOpen}
+                onSuccess={async () => {
+                  await checkSubscription();
+                }}
+              />
             ) : (
               <Button
                 className="w-full"
                 onClick={handleUpgrade}
-                disabled={loading}
               >
-                {loading ? "Loading..." : "Upgrade to Pro"}
+                Upgrade to Pro
               </Button>
             )}
           </div>
         </div>
 
-        {!isPro && (
-          <p className="text-xs text-center text-muted-foreground mt-4">
-            Just upgraded? Click the refresh button above to update your status.
-          </p>
-        )}
       </DialogContent>
     </Dialog>
   );

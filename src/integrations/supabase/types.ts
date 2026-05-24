@@ -162,6 +162,8 @@ export type Database = {
           monthly_export_count: number
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
+          subscription_cancel_at_period_end: boolean
+          subscription_cancelled_at: string | null
           subscription_expires_at: string | null
           subscription_tier: Database["public"]["Enums"]["subscription_tier"]
           updated_at: string
@@ -174,6 +176,8 @@ export type Database = {
           monthly_export_count?: number
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
+          subscription_cancel_at_period_end?: boolean
+          subscription_cancelled_at?: string | null
           subscription_expires_at?: string | null
           subscription_tier?: Database["public"]["Enums"]["subscription_tier"]
           updated_at?: string
@@ -186,6 +190,8 @@ export type Database = {
           monthly_export_count?: number
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
+          subscription_cancel_at_period_end?: boolean
+          subscription_cancelled_at?: string | null
           subscription_expires_at?: string | null
           subscription_tier?: Database["public"]["Enums"]["subscription_tier"]
           updated_at?: string
