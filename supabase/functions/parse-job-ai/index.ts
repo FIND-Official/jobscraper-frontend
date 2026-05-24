@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import Stripe from "https://esm.sh/stripe@18.5.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,31 +36,36 @@ serve(async (req) => {
       });
     }
 
-    // Check if user has Pro subscription
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (stripeKey) {
-      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-      const customers = await stripe.customers.list({ email: userData.user.email, limit: 1 });
-      
-      if (customers.data.length > 0) {
-        const subscriptions = await stripe.subscriptions.list({
-          customer: customers.data[0].id,
-          status: "active",
-          limit: 1,
-        });
-        
-        if (subscriptions.data.length === 0) {
-          return new Response(JSON.stringify({ error: "Pro subscription required for AI parsing" }), {
-            status: 403,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-      } else {
-        return new Response(JSON.stringify({ error: "Pro subscription required for AI parsing" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    const { data: profile, error: profileError } = await supabaseClient
+      .from("profiles")
+      .select("subscription_tier, subscription_expires_at")
+      .eq("id", userData.user.id)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+
+    const isPro =
+      profile?.subscription_tier === "pro" &&
+      (!profile.subscription_expires_at ||
+        new Date(profile.subscription_expires_at).getTime() > Date.now());
+
+    if (!isPro) {
+      if (profile?.subscription_tier === "pro") {
+        await supabaseClient
+          .from("profiles")
+          .update({
+            subscription_tier: "free",
+            subscription_expires_at: null,
+            subscription_cancel_at_period_end: false,
+            subscription_cancelled_at: null,
+          })
+          .eq("id", userData.user.id);
       }
+
+      return new Response(JSON.stringify({ error: "Pro subscription required for AI parsing" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const { description, title, company, location } = await req.json();

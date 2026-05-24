@@ -114,7 +114,7 @@ word-break: break-word !important;
           <div>
             <h3 className="text-xl font-semibold mb-3 text-foreground">4. Third-Party Services</h3>
             <ul className="list-disc list-inside space-y-1 ml-4">
-              <li>Stripe – payment processing</li>
+              <li>Stripe and Paystack - payment processing</li>
               <li>Supabase – authentication and database</li>
               <li>External job APIs</li>
             </ul>

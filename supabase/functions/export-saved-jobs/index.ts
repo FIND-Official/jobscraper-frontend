@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
@@ -110,9 +109,6 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
-
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
@@ -141,19 +137,29 @@ serve(async (req) => {
 
     logStep("Selected job IDs for export", { count: selectedJobIds.length });
 
-    // Check subscription status via Stripe
-    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    
-    let isPro = false;
-    if (customers.data.length > 0) {
-      const customerId = customers.data[0].id;
-      const subscriptions = await stripe.subscriptions.list({
-        customer: customerId,
-        status: "active",
-        limit: 1,
-      });
-      isPro = subscriptions.data.length > 0;
+    const { data: profile, error: profileError } = await supabaseClient
+      .from("profiles")
+      .select("subscription_tier, subscription_expires_at")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+
+    const isPro =
+      profile?.subscription_tier === "pro" &&
+      (!profile.subscription_expires_at ||
+        new Date(profile.subscription_expires_at).getTime() > Date.now());
+
+    if (!isPro && profile?.subscription_tier === "pro") {
+      await supabaseClient
+        .from("profiles")
+        .update({
+          subscription_tier: "free",
+          subscription_expires_at: null,
+          subscription_cancel_at_period_end: false,
+          subscription_cancelled_at: null,
+        })
+        .eq("id", user.id);
     }
 
     logStep("Subscription status", { isPro });
