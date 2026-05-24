@@ -1,5 +1,5 @@
 import { Job } from "../types.ts";
-import { sanitizeText, sanitizeUrl } from "../utils.ts";
+import { sanitizeDescriptionHtml, sanitizeText, sanitizeUrl } from "../utils.ts";
 
 export async function scrapeRemoteOK(): Promise<Job[]> {
   console.log("[SCRAPER] Fetching RemoteOK...");
@@ -27,7 +27,7 @@ export async function scrapeRemoteOK(): Promise<Job[]> {
             .join(' - ');
 
           const description = [
-            sanitizeText(item.description),
+            sanitizeDescriptionHtml(item.description),
             salary ? `Salary: ${salary}` : null,
           ].filter(Boolean).join('\n\n') || null;
 

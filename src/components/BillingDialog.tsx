@@ -3,11 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, CreditCard, X, RefreshCw } from "lucide-react";
+import { Check, X, RefreshCw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { PaystackPayment } from "@/components/PaystackPayment";
 
 interface BillingDialogProps {
   open: boolean;
@@ -15,8 +15,7 @@ interface BillingDialogProps {
 }
 
 export const BillingDialog = ({ open, onOpenChange }: BillingDialogProps) => {
-  const { subscriptionTier, subscriptionEnd, session, checkSubscription } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const { user, subscriptionTier, subscriptionEnd, checkSubscription } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const isPro = subscriptionTier === "pro";
 
@@ -39,52 +38,9 @@ export const BillingDialog = ({ open, onOpenChange }: BillingDialogProps) => {
     }
   };
 
-  const handleManageSubscription = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("customer-portal", {
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-      if (data?.url) {
-        window.open(data.url, "_blank");
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to open billing portal",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUpgrade = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-      if (data?.url) {
-        window.open(data.url, "_blank");
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create checkout session",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+  const closeBeforePaystackOpen = async () => {
+    onOpenChange(false);
+    await new Promise((resolve) => window.setTimeout(resolve, 300));
   };
 
   return (
@@ -117,7 +73,7 @@ export const BillingDialog = ({ open, onOpenChange }: BillingDialogProps) => {
                 </p>
                 {isPro && subscriptionEnd && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Renews on {format(new Date(subscriptionEnd), "MMMM d, yyyy")}
+                    Active until {format(new Date(subscriptionEnd), "MMMM d, yyyy")}
                   </p>
                 )}
               </div>
@@ -172,28 +128,24 @@ export const BillingDialog = ({ open, onOpenChange }: BillingDialogProps) => {
 
             <div className="flex gap-3">
               {isPro ? (
-                <>
-                  <Button
-                    onClick={handleManageSubscription}
-                    disabled={loading}
-                    className="flex-1"
-                    variant="outline"
-                  >
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Manage Subscription
-                  </Button>
-                  <Button
-                    onClick={handleManageSubscription}
-                    disabled={loading}
-                    className="flex-1 bg-destructive hover:bg-destructive/90"
-                  >
-                    Cancel Plan
-                  </Button>
-                </>
+                <Button disabled className="w-full" variant="outline">
+                  Plan active
+                </Button>
+              ) : user?.email ? (
+                <PaystackPayment
+                  email={user.email}
+                  amount={20}
+                  planName="Pro"
+                  buttonText="Upgrade to Pro - $20/month"
+                  className="w-full bg-primary hover:bg-primary/90"
+                  onBeforeOpen={closeBeforePaystackOpen}
+                  onSuccess={async () => {
+                    await checkSubscription();
+                  }}
+                />
               ) : (
                 <Button
-                  onClick={handleUpgrade}
-                  disabled={loading}
+                  disabled
                   className="w-full bg-primary hover:bg-primary/90"
                 >
                   Upgrade to Pro - $20/month
@@ -214,12 +166,6 @@ export const BillingDialog = ({ open, onOpenChange }: BillingDialogProps) => {
                 <li>• Early access to new features</li>
               </ul>
             </div>
-          )}
-
-          {isPro && (
-            <p className="text-xs text-center text-muted-foreground">
-              Just upgraded? Click the refresh button above to update your status.
-            </p>
           )}
         </div>
       </DialogContent>

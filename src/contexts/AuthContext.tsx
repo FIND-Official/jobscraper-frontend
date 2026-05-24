@@ -9,6 +9,7 @@ interface AuthContextType {
   loading: boolean;
   subscriptionTier: "free" | "pro";
   subscriptionEnd: string | null;
+  subscriptionCancelAtPeriodEnd: boolean;
   signUp: (email: string, password: string, fullName?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -24,6 +25,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [subscriptionTier, setSubscriptionTier] = useState<"free" | "pro">("free");
   const [subscriptionEnd, setSubscriptionEnd] = useState<string | null>(null);
+  const [subscriptionCancelAtPeriodEnd, setSubscriptionCancelAtPeriodEnd] = useState(false);
 
   const checkSubscription = useCallback(async () => {
     const currentSession = session || (await supabase.auth.getSession()).data.session;
@@ -48,9 +50,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSubscriptionTier(data.tier);
         console.log("[AUTH] Updated subscription tier to:", data.tier);
       }
-      if (data?.subscription_end) {
-        setSubscriptionEnd(data.subscription_end);
-      }
+      setSubscriptionEnd(data?.subscription_end ?? null);
+      setSubscriptionCancelAtPeriodEnd(Boolean(data?.cancel_at_period_end));
     } catch (error) {
       console.error("[AUTH] Error checking subscription:", error);
     }
@@ -70,6 +71,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         } else {
           setSubscriptionTier("free");
           setSubscriptionEnd(null);
+          setSubscriptionCancelAtPeriodEnd(false);
         }
       }
     );
@@ -87,7 +89,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Check subscription when window gains focus (user returning from Stripe)
+  // Check subscription when window gains focus after payment or account updates.
   useEffect(() => {
     const handleFocus = () => {
       if (session?.user) {
@@ -192,6 +194,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (error) throw error;
     setSubscriptionTier("free");
     setSubscriptionEnd(null);
+    setSubscriptionCancelAtPeriodEnd(false);
     toast({
       title: "Signed out",
       description: "You have been signed out successfully",
@@ -206,6 +209,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         loading,
         subscriptionTier,
         subscriptionEnd,
+        subscriptionCancelAtPeriodEnd,
         signUp,
         signIn,
         signInWithGoogle,
