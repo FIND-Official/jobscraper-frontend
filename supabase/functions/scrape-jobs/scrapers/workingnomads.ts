@@ -1,5 +1,5 @@
 import { Job } from "../types.ts";
-import { sanitizeText, sanitizeUrl } from "../utils.ts";
+import { sanitizeDescriptionHtml, sanitizeText, sanitizeUrl } from "../utils.ts";
 
 export async function scrapeWorkingNomads(): Promise<Job[]> {
   console.log("[SCRAPER] Fetching Working Nomads...");
@@ -21,7 +21,7 @@ export async function scrapeWorkingNomads(): Promise<Job[]> {
             title: sanitizeText(item.title, 200) || "Untitled",
             company: sanitizeText(item.company_name, 200) || "Unknown",
             location: sanitizeText(item.location, 100) || "Remote",
-            description: sanitizeText(item.description),
+            description: sanitizeDescriptionHtml(item.description),
             apply_url: url,
             source: "Working Nomads",
             posted_date: item.pub_date ? new Date(item.pub_date).toISOString() : new Date().toISOString(),

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bookmark,
   ExternalLink,
@@ -10,7 +10,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import CleanText from "@/components/CleanText";
-import DOMPurify from "dompurify";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -21,10 +20,10 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { AuthDialog } from "./AuthDialog";
 import { JobDetailModal } from "./JobDetailModal";
 import { toast } from "@/hooks/use-toast";
 import { differenceInDays, format } from "date-fns";
+import { useNavigate } from "react-router-dom";
 
 interface Job {
   id: string;
@@ -49,6 +48,7 @@ interface ScrapeSession {
   id: string;
   timestamp: string;
   searchQuery: string;
+  experienceLevel?: string;
   boards: string[];
   jobCount: number;
 }
@@ -56,18 +56,108 @@ interface ScrapeSession {
 interface JobListProps {
   scrapeSessions?: ScrapeSession[];
   onClearSessions?: () => void;
+  onSessionResultCount?: (sessionId: string, count: number) => void;
   refreshTrigger?: number;
 }
 
 const DISMISSED_JOBS_KEY = "dismissed_jobs_anonymous";
-const HAS_SCRAPED_KEY = "has_scraped_jobs";
+const STALE_JOB_DAYS = 14;
+
+const normalizeSearchText = (value: string | null | undefined): string =>
+  value?.toLowerCase().replace(/\s+/g, " ").trim() || "";
+
+const getJobSearchText = (job: Job): string =>
+  normalizeSearchText(
+    [
+      job.title,
+      job.company,
+      job.location,
+      job.job_type,
+      job.description,
+      job.source,
+      ...(job.tags || []),
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+
+const matchesKeyword = (job: Job, keyword: string): boolean => {
+  const query = normalizeSearchText(keyword);
+  if (!query || query === "all jobs") return true;
+
+  const searchText = getJobSearchText(job);
+  return query.split(" ").every((term) => searchText.includes(term));
+};
+
+const experiencePatterns: Record<string, RegExp[]> = {
+  entry: [
+    /\bentry[-\s]?level\b/i,
+    /\bjunior\b/i,
+    /\bjr\.?\b/i,
+    /\bintern(ship)?\b/i,
+    /\bgraduate\b/i,
+    /\bnew grad\b/i,
+    /\bearly career\b/i,
+    /\bassociate\b/i,
+    /\bapprentice(ship)?\b/i,
+    /\b0\s*(?:-|to|\+)\s*2\s+years?\b/i,
+  ],
+  mid: [
+    /\bmid[-\s]?level\b/i,
+    /\bintermediate\b/i,
+    /\b2\s*\+\s*years?\b/i,
+    /\b3\s*\+\s*years?\b/i,
+    /\b2\s*(?:-|to)\s*4\s+years?\b/i,
+    /\b3\s*(?:-|to)\s*5\s+years?\b/i,
+  ],
+  senior: [
+    /\bsenior\b/i,
+    /\bsr\.?\b/i,
+    /\blead\b/i,
+    /\bstaff\b/i,
+    /\bprincipal\b/i,
+    /\barchitect\b/i,
+    /\bdirector\b/i,
+    /\bhead of\b/i,
+    /\b5\s*\+\s*years?\b/i,
+    /\b6\s*\+\s*years?\b/i,
+    /\b7\s*\+\s*years?\b/i,
+    /\b8\s*\+\s*years?\b/i,
+  ],
+};
+
+const matchesExperienceLevel = (
+  job: Job,
+  experienceLevel?: string,
+): boolean => {
+  if (!experienceLevel || experienceLevel === "any") return true;
+
+  const patterns = experiencePatterns[experienceLevel];
+  if (!patterns) return true;
+
+  const searchText = getJobSearchText(job);
+  return patterns.some((pattern) => pattern.test(searchText));
+};
+
+const formatExperienceLevel = (experienceLevel?: string): string | null => {
+  if (!experienceLevel || experienceLevel === "any") return null;
+  if (experienceLevel === "entry") return "Entry Level";
+  if (experienceLevel === "mid") return "Mid Level";
+  if (experienceLevel === "senior") return "Senior Level";
+  return experienceLevel;
+};
+
+const pluralizeJobs = (count: number): string =>
+  `${count} job${count === 1 ? "" : "s"}`;
 
 export const JobList = ({
   scrapeSessions = [],
   onClearSessions,
+  onSessionResultCount,
   refreshTrigger,
 }: JobListProps) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState<DeduplicatedJob[]>([]);
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set());
   const [exportedJobIds, setExportedJobIds] = useState<Set<string>>(new Set());
@@ -75,7 +165,6 @@ export const JobList = ({
     new Set(),
   );
   const [loading, setLoading] = useState(true);
-  const [showAuth, setShowAuth] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
@@ -85,15 +174,10 @@ export const JobList = ({
     new Map(),
   );
   const [sortBy, setSortBy] = useState<"relevance" | "date">("relevance");
-  const [hasScraped, setHasScraped] = useState(false);
+  const lastAnnouncedRefresh = useRef(0);
   const jobsPerPage = 10;
 
   // HTML CLEANER FUNCTION - NO EXTRA FILES NEEDED
-
-  useEffect(() => {
-    const scraped = localStorage.getItem(HAS_SCRAPED_KEY);
-    setHasScraped(scraped === "true");
-  }, []);
 
   useEffect(() => {
     fetchDismissedJobs();
@@ -104,18 +188,12 @@ export const JobList = ({
   }, [user]);
 
   useEffect(() => {
-    if (hasScraped || user) {
-      fetchJobs();
-    } else {
-      setLoading(false);
-    }
-  }, [dismissedJobIds, hasScraped, user]);
+    fetchJobs();
+  }, [dismissedJobIds, user]);
 
   useEffect(() => {
     if (refreshTrigger && refreshTrigger > 0) {
-      localStorage.setItem(HAS_SCRAPED_KEY, "true");
-      setHasScraped(true);
-      fetchJobs();
+      fetchJobs({ announceResult: true });
     }
   }, [refreshTrigger]);
 
@@ -222,7 +300,9 @@ export const JobList = ({
     }
   };
 
-  const fetchJobs = async () => {
+  const fetchJobs = async ({
+    announceResult = false,
+  }: { announceResult?: boolean } = {}) => {
     setLoading(true);
     try {
       // Get latest session
@@ -232,7 +312,7 @@ export const JobList = ({
         .from("jobs")
         .select("*")
         .order("scraped_at", { ascending: false })
-        .limit(100);
+        .limit(1000);
 
       if (error) throw error;
 
@@ -243,25 +323,7 @@ export const JobList = ({
 
       // Apply search filtering ONLY if user scraped
       if (latestSession) {
-        const keyword =
-          latestSession.searchQuery?.toLowerCase() === "all jobs"
-            ? ""
-            : latestSession.searchQuery?.toLowerCase();
-
         filteredData = filteredData.filter((job) => {
-          // ✅ STRICT filtering: Only match keyword in job title
-          const matchesKeyword =
-            !keyword || job.title?.toLowerCase().includes(keyword);
-
-          // Optional: Also check tags for better accuracy without being too loose
-          // Uncomment the line below if you want to include tag matching
-          // const matchesKeywordInTags = job.tags?.some(tag =>
-          //   tag.toLowerCase().includes(keyword)
-          // );
-          // const matchesKeyword = !keyword ||
-          //   job.title?.toLowerCase().includes(keyword) ||
-          //   matchesKeywordInTags;
-
           const matchesBoard =
             !latestSession.boards?.length ||
             latestSession.boards.some(
@@ -269,13 +331,48 @@ export const JobList = ({
                 board.toLowerCase().trim() === job.source?.toLowerCase().trim(),
             );
 
-          return matchesKeyword && matchesBoard;
+          return (
+            matchesBoard &&
+            matchesKeyword(job, latestSession.searchQuery) &&
+            matchesExperienceLevel(job, latestSession.experienceLevel)
+          );
         });
       }
 
       const deduplicated = deduplicateJobs(filteredData);
       setJobs(deduplicated);
       setCurrentPage(1);
+      setSelectedJobs(new Set());
+      setSelectAll(false);
+
+      if (latestSession) {
+        onSessionResultCount?.(latestSession.id, deduplicated.length);
+      }
+
+      if (
+        announceResult &&
+        latestSession &&
+        refreshTrigger &&
+        refreshTrigger !== lastAnnouncedRefresh.current
+      ) {
+        lastAnnouncedRefresh.current = refreshTrigger;
+        const count = deduplicated.length;
+        const experienceLabel = formatExperienceLevel(latestSession.experienceLevel);
+        const filterParts = [
+          latestSession.searchQuery && latestSession.searchQuery !== "All Jobs"
+            ? `"${latestSession.searchQuery}"`
+            : null,
+          experienceLabel,
+        ].filter(Boolean);
+        const filterLabel = filterParts.length
+          ? ` for ${filterParts.join(", ")}`
+          : "";
+
+        toast({
+          title: count > 0 ? "Jobs found" : "No matching jobs",
+          description: `Showing ${pluralizeJobs(count)}${filterLabel} from ${latestSession.boards.length} board(s).`,
+        });
+      }
     } catch (error) {
       console.error("Error fetching jobs:", error);
     } finally {
@@ -301,7 +398,7 @@ export const JobList = ({
 
   const handleSave = async (jobId: string) => {
     if (!user) {
-      setShowAuth(true);
+      navigate("/auth?mode=signup");
       return;
     }
 
@@ -425,7 +522,7 @@ export const JobList = ({
       new Date(),
       new Date(firstSeen),
     );
-    return daysSinceFirstSeen >= 30;
+    return daysSinceFirstSeen >= STALE_JOB_DAYS;
   };
 
   const handleJobClick = (job: DeduplicatedJob) => {
@@ -483,30 +580,13 @@ export const JobList = ({
     0,
   );
 
-  if (!hasScraped && !user) {
-    return (
-      <div className="space-y-8">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <h2 className="text-2xl font-semibold">
-            Results <span className="text-primary">0</span>
-          </h2>
-        </div>
-        <div className="text-center py-12 bg-card rounded-lg border border-border">
-          <p className="text-muted-foreground">
-            No jobs found. Click "Scrape Jobs" to get started!
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
       <div className="space-y-8">
         {scrapeSessions.length > 0 && (
           <div className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-medium text-sm">Recent Scrapes</h3>
+              <h3 className="font-medium text-sm">Active Filters</h3>
               <Button
                 variant="ghost"
                 size="sm"
@@ -514,7 +594,7 @@ export const JobList = ({
                 className="text-xs text-muted-foreground hover:text-destructive"
               >
                 <Trash2 className="h-3 w-3 mr-1" />
-                Clear History
+                Clear Filters
               </Button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -524,8 +604,11 @@ export const JobList = ({
                   variant="secondary"
                   className="text-xs py-1 px-2"
                 >
-                  "{session.searchQuery}" - {session.boards.join(", ")} (
-                  {session.jobCount} jobs) •{" "}
+                  "{session.searchQuery}"
+                  {formatExperienceLevel(session.experienceLevel)
+                    ? ` - ${formatExperienceLevel(session.experienceLevel)}`
+                    : ""}{" "}
+                  - {session.boards.join(", ")} ({pluralizeJobs(session.jobCount)}) -{" "}
                   {format(new Date(session.timestamp), "hh:mm a")}
                 </Badge>
               ))}
@@ -665,9 +748,9 @@ export const JobList = ({
                       </div>
                       {/* Description - CLEAN HTML */}
                       {job.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+                        <div className="text-sm text-muted-foreground line-clamp-2 mb-3">
                           <CleanText html={job.description} maxLength={200} />
-                        </p>
+                        </div>
                       )}
                       <div className="flex flex-wrap gap-2">
                         {job.tags?.slice(0, 5).map((tag, index) => (
@@ -736,8 +819,6 @@ export const JobList = ({
           </div>
         )}
       </div>
-
-      <AuthDialog open={showAuth} onOpenChange={setShowAuth} />
 
       <JobDetailModal
         job={selectedJob}

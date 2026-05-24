@@ -17,24 +17,30 @@ import {
   BarChart3, 
   CalendarIcon, 
   ArrowLeft,
-  CreditCard,
   Loader2
 } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
 import { DateRange } from "react-day-picker";
 import NotificationPreferences from "@/components/NotificationPreferences";
 import { Link } from "react-router-dom";
+import { PaystackPayment } from "@/components/PaystackPayment";
+import { toast } from "@/hooks/use-toast";
 
 interface JobBoardStats {
   [key: string]: number;
 }
 
 const Account = () => {
-  const { user, subscriptionTier, subscriptionEnd, session } = useAuth();
+  const {
+    user,
+    session,
+    subscriptionTier,
+    subscriptionEnd,
+    subscriptionCancelAtPeriodEnd,
+    checkSubscription,
+  } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [manageLoading, setManageLoading] = useState(false);
-  const [upgradeLoading, setUpgradeLoading] = useState(false);
+  const [cancellingSubscription, setCancellingSubscription] = useState(false);
   const [savedJobsCount, setSavedJobsCount] = useState(0);
   const [filteredSavedJobsCount, setFilteredSavedJobsCount] = useState(0);
   const [remainingScrapes, setRemainingScrapes] = useState(0);
@@ -131,55 +137,48 @@ const Account = () => {
     }
   };
 
-  const handleManageSubscription = async () => {
-    if (!session?.access_token) return;
-    
-    setManageLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("customer-portal", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-      if (data?.url) {
-        window.open(data.url, "_blank");
-      }
-    } catch (error: any) {
+  const handleCancelSubscription = async () => {
+    if (!session?.access_token) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to open subscription management",
+        title: "Sign in required",
+        description: "Please sign in again to manage your plan.",
         variant: "destructive",
       });
-    } finally {
-      setManageLoading(false);
+      return;
     }
-  };
 
-  const handleUpgrade = async () => {
-    if (!session?.access_token) return;
+    setCancellingSubscription(true);
 
-    setUpgradeLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
+      const { data, error } = await supabase.functions.invoke("cancel-subscription", {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
       });
 
       if (error) throw error;
-      if (data?.url) {
-        window.open(data.url, "_blank");
+      if (!data?.success) {
+        throw new Error(data?.error || "Unable to cancel your Pro plan.");
       }
+
+      const endDate = data.subscription_end || subscriptionEnd;
+      const readableEndDate = endDate ? format(new Date(endDate), "MMMM d, yyyy") : "the end of your current period";
+
+      toast({
+        title: "Pro plan cancelled",
+        description: `You can still use Pro until ${readableEndDate}. After that, your account will change to Free.`,
+      });
+
+      await checkSubscription();
+      await fetchAccountData();
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to start upgrade process",
+        title: "Could not cancel Pro",
+        description: error.message || "Please try again.",
         variant: "destructive",
       });
     } finally {
-      setUpgradeLoading(false);
+      setCancellingSubscription(false);
     }
   };
 
@@ -233,7 +232,9 @@ const Account = () => {
                   <div>
                     {isPro && subscriptionEnd && (
                       <p className="text-sm text-muted-foreground">
-                        Renews on {format(new Date(subscriptionEnd), "MMMM d, yyyy")}
+                        {subscriptionCancelAtPeriodEnd
+                          ? `Pro cancelled. You can use Pro until ${format(new Date(subscriptionEnd), "MMMM d, yyyy")}.`
+                          : `Active until ${format(new Date(subscriptionEnd), "MMMM d, yyyy")}`}
                       </p>
                     )}
                     {!isPro && (
@@ -246,28 +247,26 @@ const Account = () => {
                     {isPro ? (
                       <Button 
                         variant="outline" 
-                        onClick={handleManageSubscription}
-                        disabled={manageLoading}
+                        onClick={handleCancelSubscription}
+                        disabled={cancellingSubscription || subscriptionCancelAtPeriodEnd}
                       >
-                        {manageLoading ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <CreditCard className="h-4 w-4 mr-2" />
-                        )}
-                        Manage Subscription
+                        {subscriptionCancelAtPeriodEnd
+                          ? "Pro ending"
+                          : cancellingSubscription
+                            ? "Cancelling..."
+                            : "Cancel Pro"}
                       </Button>
                     ) : (
-                      <Button 
-                        onClick={handleUpgrade}
-                        disabled={upgradeLoading}
-                      >
-                        {upgradeLoading ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <Crown className="h-4 w-4 mr-2" />
-                        )}
-                        Upgrade to Pro
-                      </Button>
+                      <PaystackPayment
+                        email={user.email || ""}
+                        amount={20}
+                        planName="Pro"
+                        buttonText="Upgrade to Pro"
+                        onSuccess={async () => {
+                          await checkSubscription();
+                          await fetchAccountData();
+                        }}
+                      />
                     )}
                   </div>
                 </div>

@@ -12,6 +12,7 @@ interface ScrapeSession {
   id: string;
   timestamp: string;
   searchQuery: string;
+  experienceLevel?: string;
   boards: string[];
   jobCount: number;
 }
@@ -20,6 +21,7 @@ const Index = () => {
   const { checkSubscription, user } = useAuth();
   const [scrapeSessions, setScrapeSessions] = useState<ScrapeSession[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [clearFiltersTrigger, setClearFiltersTrigger] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Check if onboarding should be shown
@@ -34,7 +36,7 @@ const Index = () => {
     }
   }, []);
 
-  // Handle Stripe redirect with success param
+  // Handle legacy payment redirect params if a provider returns to the app.
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const success = urlParams.get('success');
@@ -72,6 +74,23 @@ const Index = () => {
 
   const handleClearSessions = useCallback(() => {
     setScrapeSessions([]);
+    setClearFiltersTrigger(prev => prev + 1);
+  }, []);
+
+  const handleSessionResultCount = useCallback((sessionId: string, count: number) => {
+    setScrapeSessions(prev => {
+      let changed = false;
+      const next = prev.map(session => {
+        if (session.id !== sessionId || session.jobCount === count) {
+          return session;
+        }
+
+        changed = true;
+        return { ...session, jobCount: count };
+      });
+
+      return changed ? next : prev;
+    });
   }, []);
 
   const handleOnboardingComplete = () => {
@@ -86,12 +105,16 @@ const Index = () => {
     <div className="lg:mr-80">
       <main className="container mx-auto px-4 pt-24 pb-32">
         <div className="max-w-5xl mx-auto lg:mx-0">
-          <JobSearch onScrapeComplete={handleScrapeComplete} />
+          <JobSearch
+            onScrapeComplete={handleScrapeComplete}
+            clearFiltersTrigger={clearFiltersTrigger}
+          />
 
           <div className="mt-12">
             <JobList
               scrapeSessions={scrapeSessions}
               onClearSessions={handleClearSessions}
+              onSessionResultCount={handleSessionResultCount}
               refreshTrigger={refreshTrigger}
             />
           </div>
