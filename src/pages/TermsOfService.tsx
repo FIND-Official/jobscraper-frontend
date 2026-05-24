@@ -97,7 +97,9 @@ const termsHTML = `<style>
 
   <div data-custom-class="heading_1"><strong>8. Refunds</strong></div>
   <div data-custom-class="body_text">
-    We issue refunds for Contracts within <strong>0 days</strong> of the original purchase of the Contract.
+    Pro plan payments are processed through Paystack. If you purchase Pro and need a refund, you must contact us at <a data-custom-class="link" href="mailto:info@wefindservices.org">info@wefindservices.org</a> within <strong>14 days</strong> of the payment date.<br/><br/>
+    Refunds are only available if the Pro benefits have not been used. Pro benefits include, but are not limited to, using Pro-only job boards, exporting jobs beyond the free plan limit, using advanced AI job parsing, or using any other paid Pro feature after your payment.<br/><br/>
+    If your refund is approved, your Pro access may be removed and your account may return to the Free plan. If you cancel your Pro plan without requesting or qualifying for a refund, you can continue using Pro until the active end date shown in your account, after which your account will change to Free.
   </div>
   <br/>
 
