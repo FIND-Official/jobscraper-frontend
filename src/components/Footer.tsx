@@ -91,7 +91,7 @@ export const Footer = () => {
                   to="/terms"
                   className="whitespace-nowrap text-muted-foreground hover:text-primary transition-colors"
                 >
-                  Term
+                  Terms
                 </Link>
 
               </div>
