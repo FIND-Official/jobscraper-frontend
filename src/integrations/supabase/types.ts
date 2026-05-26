@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      anonymous_visitors: {
+        Row: {
+          created_at: string
+          id: string
+          scrape_count: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          scrape_count?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          scrape_count?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       archived_jobs: {
         Row: {
           archived_at: string
@@ -149,6 +170,93 @@ export type Database = {
           last_sent_at?: string | null
           search_keyword?: string | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payment_webhook_logs: {
+        Row: {
+          created_at: string
+          error: string | null
+          event_type: string
+          id: string
+          payload: Json
+          processed: boolean
+          provider: string
+          provider_transaction_id: string | null
+          reference: string | null
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          event_type: string
+          id?: string
+          payload: Json
+          processed?: boolean
+          provider?: string
+          provider_transaction_id?: string | null
+          reference?: string | null
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed?: boolean
+          provider?: string
+          provider_transaction_id?: string | null
+          reference?: string | null
+        }
+        Relationships: []
+      }
+      paystack_transactions: {
+        Row: {
+          amount_ngn: number | null
+          amount_usd: number | null
+          created_at: string | null
+          currency: string | null
+          email: string | null
+          exchange_rate: number | null
+          id: string
+          paid_at: string | null
+          paystack_transaction_id: string | null
+          plan: string | null
+          reference: string | null
+          status: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount_ngn?: number | null
+          amount_usd?: number | null
+          created_at?: string | null
+          currency?: string | null
+          email?: string | null
+          exchange_rate?: number | null
+          id: string
+          paid_at?: string | null
+          paystack_transaction_id?: string | null
+          plan?: string | null
+          reference?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount_ngn?: number | null
+          amount_usd?: number | null
+          created_at?: string | null
+          currency?: string | null
+          email?: string | null
+          exchange_rate?: number | null
+          id?: string
+          paid_at?: string | null
+          paystack_transaction_id?: string | null
+          plan?: string | null
+          reference?: string | null
+          status?: string | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []
