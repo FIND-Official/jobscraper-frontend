@@ -1,0 +1,15 @@
+# FIND
+
+> FIND is a remote-job aggregator that scrapes multiple remote-friendly job boards and surfaces fresh openings with direct application links — no third-party recruiters in the middle.
+
+FIND helps remote workers discover and save jobs across multiple boards in one place, with a free tier and an optional PRO plan that unlocks unlimited exports, more saved-search boards, and AI-assisted job parsing.
+
+## Pages
+
+- [Home](/): Search and scrape remote jobs across supported boards.
+- [Privacy Policy](/privacy): How user data is collected, stored, and used.
+- [Terms of Service](/terms): Terms governing the use of FIND.
+
+## Optional
+
+- [Sitemap](/sitemap.xml): Machine-readable index of public routes.
