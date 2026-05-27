@@ -1,8 +1,16 @@
 User-agent: Googlebot
 Allow: /
+Disallow: /auth
+Disallow: /account
+Disallow: /reset-password
+Disallow: /cleanup
 
 User-agent: Bingbot
 Allow: /
+Disallow: /auth
+Disallow: /account
+Disallow: /reset-password
+Disallow: /cleanup
 
 User-agent: Twitterbot
 Allow: /
@@ -12,3 +20,9 @@ Allow: /
 
 User-agent: *
 Allow: /
+Disallow: /auth
+Disallow: /account
+Disallow: /reset-password
+Disallow: /cleanup
+
+Sitemap: https://jobscraper.lovable.app/sitemap.xml

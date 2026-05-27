@@ -2,6 +2,7 @@ import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { SEO } from "@/components/SEO";
 
 const Cleanup = () => {
   const [status, setStatus] = useState("Ready");
@@ -27,6 +28,11 @@ const Cleanup = () => {
 
   return (
     <div className="mx-auto max-w-2xl p-8">
+      <SEO
+        title="Job Description Repair Tool — FIND JobScraper"
+        description="Refresh and repair job descriptions for We Work Remotely jobs in FIND JobScraper."
+        path="/cleanup"
+      />
       <h1 className="mb-4 text-2xl font-bold">Job Description Repair</h1>
 
       <p className="mb-4 text-muted-foreground">
