@@ -1,6 +1,7 @@
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { BackToTop } from "@/components/BackToTop";
+import { SEO } from "@/components/SEO";
 
 const PrivacyPolicy = () => {
   const termlyHTML = `<style>
@@ -70,6 +71,11 @@ word-break: break-word !important;
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      <SEO
+        title="Privacy Policy | FIND"
+        description="How FIND collects, stores, and uses your personal data, including account info, saved jobs, and analytics."
+        path="/privacy"
+      />
       <Header />
 
       <main className="flex-1 container mx-auto px-4 pt-32 pb-12 max-w-4xl">

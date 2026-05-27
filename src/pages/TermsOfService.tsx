@@ -1,6 +1,7 @@
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { BackToTop } from "@/components/BackToTop";
+import { SEO } from "@/components/SEO";
 
 const termsHTML = `<style>
   [data-custom-class='body'], [data-custom-class='body'] * {
@@ -222,6 +223,11 @@ const termsHTML = `<style>
 const TermsOfService = () => {
   return (
     <>
+      <SEO
+        title="Terms of Service | FIND"
+        description="Terms governing the use of FIND, the remote-jobs aggregator — accounts, subscriptions, acceptable use, and limitations of liability."
+        path="/terms"
+      />
       <Header />
       <main className="flex-1 bg-black text-white min-h-screen w-full px-4 pt-28 pb-12">
         <div dangerouslySetInnerHTML={{ __html: termsHTML }} />

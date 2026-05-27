@@ -5,6 +5,7 @@ import { JobSearch } from "@/components/JobSearch";
 import { JobList } from "@/components/JobList";
 import { SavedJobsSidebar } from "@/components/SavedJobsSidebar";
 import { OnboardingTour } from "@/components/OnboardingTour";
+import { SEO } from "@/components/SEO";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 
@@ -99,6 +100,11 @@ const Index = () => {
 
   return (
   <div className="min-h-screen bg-background">
+    <SEO
+      title="FIND — Remote Jobs Aggregated From Trusted Boards"
+      description="Search fresh remote jobs aggregated from multiple boards. Save listings, export to CSV, and apply directly on the original company site."
+      path="/"
+    />
     <Header />
 
     {/* 👇 THIS IS THE FIX */}
