@@ -24,6 +24,7 @@ import NotificationPreferences from "@/components/NotificationPreferences";
 import { Link } from "react-router-dom";
 import { PaystackPayment } from "@/components/PaystackPayment";
 import { toast } from "@/hooks/use-toast";
+import { SEO } from "@/components/SEO";
 
 interface JobBoardStats {
   [key: string]: number;
@@ -188,6 +189,11 @@ const Account = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="My Account — FIND JobScraper"
+        description="Manage your FIND JobScraper account, view subscription details, saved jobs, and statistics from job boards."
+        path="/account"
+      />
       <Header />
       
       <main className="container mx-auto px-4 pt-24 pb-32 max-w-4xl">
