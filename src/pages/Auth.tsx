@@ -8,6 +8,7 @@ import { toast } from "@/hooks/use-toast";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Mail, Lock, User, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { SEO } from "@/components/SEO";
 
 
 export default function AuthPage() {
@@ -100,6 +101,14 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted px-4 py-8">
+      <SEO
+        title={isSignUp ? "Create Account — FIND JobScraper" : "Sign In — FIND JobScraper"}
+        description={isSignUp 
+          ? "Sign up for FIND JobScraper to access aggregated remote job listings from multiple trusted boards."
+          : "Sign in to your FIND JobScraper account to access saved jobs and advanced search features."
+        }
+        path="/auth"
+      />
       <div className="w-full max-w-5xl overflow-hidden rounded-3xl shadow-2xl bg-background grid grid-cols-1 md:grid-cols-2">
 
         {/* FORM */}
@@ -119,7 +128,7 @@ export default function AuthPage() {
 
               <h1 className="text-2xl sm:text-3xl font-bold mb-2">Reset password</h1>
               <p className="text-sm sm:text-base text-muted-foreground mb-6">
-                Enter your email and we’ll send you a reset link.
+                Enter your email and we'll send you a reset link.
               </p>
 
               <form onSubmit={handleForgotPassword} className="space-y-5">
@@ -302,4 +311,3 @@ function Field({
     </div>
   );
 }
-
