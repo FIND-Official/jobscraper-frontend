@@ -44,8 +44,9 @@ serve(async (req: Request): Promise<Response> => {
       throw new Error("Invalid Mailchimp API key format");
     }
 
-    const audienceId = "0b7157eb3f";
+    const audienceId = Deno.env.get("MAILCHIMP_AUDIENCE_ID") || "0b7157eb3f";
     const tagName = "jobscraper_users";
+    const authHeader = "Basic " + btoa(`anystring:${apiKey}`);
 
     const { email, fullName }: MailchimpSyncRequest = await req.json();
 
@@ -85,7 +86,7 @@ serve(async (req: Request): Promise<Response> => {
     const memberResponse = await fetch(memberUrl, {
       method: "PUT",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
+        "Authorization": authHeader,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(memberData),
@@ -117,7 +118,7 @@ serve(async (req: Request): Promise<Response> => {
     const tagResponse = await fetch(tagsUrl, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
+        "Authorization": authHeader,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(tagData),

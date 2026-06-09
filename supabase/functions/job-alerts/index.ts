@@ -383,14 +383,12 @@ serve(async (req: Request): Promise<Response> => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const mailchimpApiKey = Deno.env.get("MAILCHIMP_API_KEY");
+    const audienceId = Deno.env.get("MAILCHIMP_AUDIENCE_ID") || "0b7157eb3f";
     
     if (!mailchimpApiKey) {
       console.error("[JOB-ALERTS] MAILCHIMP_API_KEY not configured");
       throw new Error("MAILCHIMP_API_KEY not configured");
     }
-
-    // Mailchimp audience ID - this should be your existing audience
-    const audienceId = "0b7157eb3f";
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
