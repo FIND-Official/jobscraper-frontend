@@ -118,9 +118,34 @@ const NotificationPreferences = () => {
         }
       }
 
+      // If enabling alerts, ensure the user is synced to Mailchimp.
+      // Signup already syncs, but enabling later can leave Mailchimp state stale.
+      if (preferences.enabled) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        const email = profile?.email;
+        const fullName = "";
+
+        if (email) {
+          const { error } = await supabase.functions.invoke("mailchimp-sync", {
+            body: { email, fullName },
+          });
+
+          if (error) {
+            console.error("[NOTIFICATION-PREFERENCES] mailchimp-sync failed:", error);
+          }
+        } else {
+          console.warn("[NOTIFICATION-PREFERENCES] No profile email found; skipping mailchimp-sync.");
+        }
+      }
+
       toast({
         title: "Preferences saved",
-        description: preferences.enabled 
+        description: preferences.enabled
           ? `You'll receive ${preferences.frequency} job alerts.`
           : "Job alerts are now disabled.",
       });
