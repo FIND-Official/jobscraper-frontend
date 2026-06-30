@@ -66,7 +66,7 @@ const EXPERIENCE_FILTERS: Record<string, string[]> = {
 
 function getFrequencyHours(frequency: string): number {
    switch (frequency) {
-    case "daily": return 6;
+    case "daily": return 24;
     case "weekly": return 168;
     case "monthly": return 720;
     default: return 24;
