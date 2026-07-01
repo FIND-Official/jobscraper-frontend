@@ -390,8 +390,11 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     // Mailchimp audience ID - this should be your existing audience
-    const audienceId = "0b7157eb3f";
+    const audienceId = Deno.env.get("MAILCHIMP_AUDIENCE_ID");
 
+    if (!audienceId) {
+       throw new Error("MAILCHIMP_AUDIENCE_ID is not configured");
+  }
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get all enabled notification preferences
