@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSavedJobs } from "@/contexts/SavedJobsContext";
 import { JobDetailModal } from "./JobDetailModal";
 import { toast } from "@/hooks/use-toast";
 import { differenceInDays, format } from "date-fns";
@@ -157,9 +158,9 @@ export const JobList = ({
   refreshTrigger,
 }: JobListProps) => {
   const { user } = useAuth();
+  const { savedJobIds, saveJob, unsaveJob } = useSavedJobs();
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<DeduplicatedJob[]>([]);
-  const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set());
   const [exportedJobIds, setExportedJobIds] = useState<Set<string>>(new Set());
   const [dismissedJobIds, setDismissedJobIds] = useState<Set<string>>(
     new Set(),
@@ -182,7 +183,6 @@ export const JobList = ({
   useEffect(() => {
     fetchDismissedJobs();
     if (user) {
-      fetchSavedJobs();
       loadExportedJobs();
     }
   }, [user]);
@@ -218,7 +218,7 @@ export const JobList = ({
           filter: `user_id=eq.${user.id}`,
         },
         () => {
-          fetchSavedJobs();
+          refreshSavedJobs();
         },
       )
       .subscribe();
@@ -380,22 +380,6 @@ export const JobList = ({
     }
   };
 
-  const fetchSavedJobs = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("saved_jobs")
-        .select("job_id")
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-      setSavedJobIds(new Set(data.map((item) => item.job_id)));
-    } catch (error) {
-      console.error("Error fetching saved jobs:", error);
-    }
-  };
-
   const handleSave = async (jobId: string) => {
     if (!user) {
       navigate("/auth?mode=signup");
@@ -404,30 +388,14 @@ export const JobList = ({
 
     try {
       if (savedJobIds.has(jobId)) {
-        const { error } = await supabase
-          .from("saved_jobs")
-          .delete()
-          .eq("job_id", jobId)
-          .eq("user_id", user.id);
-
-        if (error) throw error;
-
-        const newSaved = new Set(savedJobIds);
-        newSaved.delete(jobId);
-        setSavedJobIds(newSaved);
+        await unsaveJob(jobId);
 
         toast({
           title: "Job removed",
           description: "Job removed from saved list",
         });
       } else {
-        const { error } = await supabase
-          .from("saved_jobs")
-          .insert({ job_id: jobId, user_id: user.id });
-
-        if (error) throw error;
-
-        setSavedJobIds(new Set([...savedJobIds, jobId]));
+        await saveJob(jobId);
 
         toast({
           title: "Job saved!",
