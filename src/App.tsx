@@ -13,12 +13,15 @@ import TermsOfService from "./pages/TermsOfService";
 import Account from "./pages/Account";
 import ResetPassword from "./pages/ResetPassword";
 import Auth from "./pages/Auth"; 
+import { SavedJobsProvider } from "./contexts/SavedJobsContext";
+
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
+      <SavedJobsProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -31,11 +34,11 @@ const App = () => (
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/cleanup" element={<Cleanup />} />
-
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
+      </SavedJobsProvider>
     </AuthProvider>
   </QueryClientProvider>
 );
