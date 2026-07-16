@@ -66,7 +66,7 @@ const EXPERIENCE_FILTERS: Record<string, string[]> = {
 
 function getFrequencyHours(frequency: string): number {
    switch (frequency) {
-    case "daily": return 6;
+    case "daily": return 24;
     case "weekly": return 168;
     case "monthly": return 720;
     default: return 24;
@@ -390,8 +390,11 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     // Mailchimp audience ID - this should be your existing audience
-    const audienceId = "0b7157eb3f";
+    const audienceId = Deno.env.get("MAILCHIMP_AUDIENCE_ID");
 
+    if (!audienceId) {
+       throw new Error("MAILCHIMP_AUDIENCE_ID is not configured");
+  }
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get all enabled notification preferences
