@@ -397,7 +397,7 @@ const [experienceFilter, setExperienceFilter] = useState("all");
     } finally {
       setLoading(false);
     }
-  };
+  }, [scrapeSessions, dismissedJobIds, supabase, setLoading, toast, setJobs, setCurrentPage, setSelectedJobs, setSelectAll, onSessionResultCount, lastAnnouncedRefresh]);
 
   const handleSave = async (jobId: string) => {
     if (!user) {
