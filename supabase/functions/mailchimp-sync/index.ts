@@ -44,7 +44,11 @@ serve(async (req: Request): Promise<Response> => {
       throw new Error("Invalid Mailchimp API key format");
     }
 
-    const audienceId = "0b7157eb3f";
+    const audienceId = Deno.env.get("MAILCHIMP_AUDIENCE_ID");
+
+    if (!audienceId) {
+      throw new Error("MAILCHIMP_AUDIENCE_ID is not configured");
+   }
     const tagName = "jobscraper_users";
 
     const { email, fullName }: MailchimpSyncRequest = await req.json();

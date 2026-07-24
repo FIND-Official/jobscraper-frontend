@@ -29,6 +29,29 @@ interface JobSearchProps {
 const MAX_SAVED_SEARCHES = 5;
 const ANONYMOUS_SCRAPE_LIMIT = 2;
 
+const ROLE_SUGGESTIONS = [
+  "Frontend Developer",
+  "Backend Developer",
+  "Full Stack Developer",
+  "React Developer",
+  "Node.js Developer",
+  "Software Engineer",
+  "DevOps Engineer",
+  "UI/UX Designer",
+  "Product Designer",
+  "Graphic Designer",
+  "Data Analyst",
+  "Data Scientist",
+  "Machine Learning Engineer",
+  "QA Engineer",
+  "Project Manager",
+  "Product Manager",
+  "Business Analyst",
+  "Mobile Developer",
+  "Flutter Developer",
+  "React Native Developer",
+];
+
 const getAnonymousId = () => {
   let id = localStorage.getItem("anonymous_id");
 
@@ -53,6 +76,11 @@ export const JobSearch = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [experienceLevel, setExperienceLevel] = useState("any");
   const [savedSearches, setSavedSearches] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+const filteredSuggestions = ROLE_SUGGESTIONS.filter((role) =>
+  role.toLowerCase().includes(searchQuery.toLowerCase())
+).slice(0, 6);
 
   const isPro = subscriptionTier === "pro";
   const maxBoards = isPro ? 4 : 2;
@@ -192,10 +220,10 @@ export const JobSearch = ({
 
       onScrapeComplete?.(scrapeResult);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error",
-        description: error.message || "Failed to scrape jobs",
+        description: error instanceof Error ? error.message : "Failed to scrape jobs",
         variant: "destructive",
       });
     } finally {
@@ -248,20 +276,48 @@ export const JobSearch = ({
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <Label className="text-sm mb-2 block">Search</Label>
-            <Input
-              placeholder="e.g., designer, developer..."
-              className="bg-card"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleScrape();
-                }
-              }}
-            />
-          </div>
+        <div className="relative">
+  <Label className="text-sm mb-2 block">Search</Label>
+
+  <Input
+    placeholder="Search job title..."
+    className="bg-card"
+    value={searchQuery}
+    onChange={(e) => {
+      setSearchQuery(e.target.value);
+      setShowSuggestions(true);
+    }}
+    onFocus={() => setShowSuggestions(true)}
+    onBlur={() => {
+      setTimeout(() => setShowSuggestions(false), 150);
+    }}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        handleScrape();
+      }
+    }}
+  />
+
+  {showSuggestions &&
+    searchQuery &&
+    filteredSuggestions.length > 0 && (
+      <div className="absolute z-50 mt-2 w-full rounded-lg border border-border bg-card shadow-lg overflow-hidden">
+        {filteredSuggestions.map((role) => (
+          <button
+            key={role}
+            type="button"
+            className="w-full text-left px-4 py-2 hover:bg-primary/10 transition-colors"
+            onClick={() => {
+              setSearchQuery(role);
+              setShowSuggestions(false);
+            }}
+          >
+            {role}
+          </button>
+        ))}
+      </div>
+    )}
+</div>
           <div>
             <Label className="text-sm mb-2 block">Experience Level</Label>
             <Select value={experienceLevel} onValueChange={setExperienceLevel}>

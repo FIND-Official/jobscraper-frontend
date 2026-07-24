@@ -10,18 +10,8 @@ import { toast } from "@/hooks/use-toast";
 import { PricingDialog } from "./PricingDialog";
 import { format } from "date-fns";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useSavedJobs } from "@/contexts/SavedJobsContext";
 
-interface SavedJob {
-  id: string;
-  job_id: string;
-  saved_at: string;
-  jobs: {
-    title: string;
-    company: string;
-    location: string;
-    apply_url: string;
-  };
-}
 
 interface ArchivedJob {
   id: string;
@@ -46,7 +36,7 @@ interface GroupedJobs<T> {
 export const SavedJobsSidebar = () => {
   const { user, subscriptionTier } = useAuth();
   const isMobile = useIsMobile();
-  const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
+  const { savedJobs, saveJob, unsaveJob, refreshSavedJobs } = useSavedJobs();
   const [archivedJobs, setArchivedJobs] = useState<ArchivedJob[]>([]);
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [selectedArchivedJobs, setSelectedArchivedJobs] = useState<Set<string>>(new Set());
@@ -61,27 +51,10 @@ export const SavedJobsSidebar = () => {
 
   const FREE_EXPORT_LIMIT = 50;
 
-  const fetchSavedJobs = async () => {
-    if (!user) return;
-
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("saved_jobs")
-        .select("id, job_id, saved_at, jobs(title, company, location, apply_url)")
-        .eq("user_id", user.id)
-        .order("saved_at", { ascending: false });
-
-      if (error) throw error;
-      setSavedJobs(data || []);
-    } catch (error) {
-      console.error("Error fetching saved jobs:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // savedJobs comes from context; no local fetch required
 
   const fetchArchivedJobs = async () => {
+    // archived jobs are still fetched locally because context doesn't manage them yet
     if (!user) return;
 
     try {
@@ -143,7 +116,8 @@ export const SavedJobsSidebar = () => {
   }, [user]);
 
   useEffect(() => {
-    fetchSavedJobs();
+    // refresh saved jobs from context
+    refreshSavedJobs();
     fetchArchivedJobs();
   }, [user]);
 
@@ -161,7 +135,7 @@ export const SavedJobsSidebar = () => {
           filter: `user_id=eq.${user.id}`
         },
         () => {
-          fetchSavedJobs();
+          refreshSavedJobs();
         }
       )
       .on(
@@ -235,8 +209,7 @@ export const SavedJobsSidebar = () => {
         .in("id", Array.from(selectedJobs));
 
       if (error) throw error;
-
-      setSavedJobs(savedJobs.filter(job => !selectedJobs.has(job.id)));
+      await refreshSavedJobs();
       setSelectedJobs(new Set());
       setSelectAll(false);
 
@@ -354,8 +327,7 @@ export const SavedJobsSidebar = () => {
         .eq("id", savedJobId);
 
       if (error) throw error;
-
-      setSavedJobs(savedJobs.filter(job => job.id !== savedJobId));
+      await refreshSavedJobs();
       toast({
         title: "Job removed",
         description: "Job removed from saved list",

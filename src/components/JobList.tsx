@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bookmark,
   ExternalLink,
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSavedJobs } from "@/contexts/SavedJobsContext";
 import { JobDetailModal } from "./JobDetailModal";
 import { toast } from "@/hooks/use-toast";
 import { differenceInDays, format } from "date-fns";
@@ -157,9 +158,9 @@ export const JobList = ({
   refreshTrigger,
 }: JobListProps) => {
   const { user } = useAuth();
+  const { savedJobIds, saveJob, unsaveJob } = useSavedJobs();
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<DeduplicatedJob[]>([]);
-  const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set());
   const [exportedJobIds, setExportedJobIds] = useState<Set<string>>(new Set());
   const [dismissedJobIds, setDismissedJobIds] = useState<Set<string>>(
     new Set(),
@@ -174,18 +175,57 @@ export const JobList = ({
     new Map(),
   );
   const [sortBy, setSortBy] = useState<"relevance" | "date">("relevance");
+  const [jobTypeFilter, setJobTypeFilter] = useState("all");
+const [salaryFilter, setSalaryFilter] = useState("all");
+const [experienceFilter, setExperienceFilter] = useState("all");
   const lastAnnouncedRefresh = useRef(0);
   const jobsPerPage = 10;
 
   // HTML CLEANER FUNCTION - NO EXTRA FILES NEEDED
 
+  const fetchDismissedJobs = useCallback(async () => {
+    if (user) {
+      try {
+        const { data, error } = await supabase
+          .from("dismissed_jobs")
+          .select("job_id")
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+        setDismissedJobIds(new Set(data.map((item) => item.job_id)));
+      } catch (error) {
+        console.error("Error fetching dismissed jobs:", error);
+      }
+    } else {
+      const dismissed = localStorage.getItem(DISMISSED_JOBS_KEY);
+      if (dismissed) {
+        setDismissedJobIds(new Set(JSON.parse(dismissed)));
+      }
+    }
+  }, [user]);
+
+  const fetchSavedJobs = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("saved_jobs")
+        .select("job_id")
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      setSavedJobIds(new Set(data.map((item) => item.job_id)));
+    } catch (error) {
+      console.error("Error fetching saved jobs:", error);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchDismissedJobs();
     if (user) {
-      fetchSavedJobs();
       loadExportedJobs();
     }
-  }, [user]);
+  }, [user, fetchDismissedJobs, fetchSavedJobs]);
 
   useEffect(() => {
     fetchJobs();
@@ -218,7 +258,7 @@ export const JobList = ({
           filter: `user_id=eq.${user.id}`,
         },
         () => {
-          fetchSavedJobs();
+          refreshSavedJobs();
         },
       )
       .subscribe();
@@ -279,28 +319,7 @@ export const JobList = ({
     );
   };
 
-  const fetchDismissedJobs = async () => {
-    if (user) {
-      try {
-        const { data, error } = await supabase
-          .from("dismissed_jobs")
-          .select("job_id")
-          .eq("user_id", user.id);
-
-        if (error) throw error;
-        setDismissedJobIds(new Set(data.map((item) => item.job_id)));
-      } catch (error) {
-        console.error("Error fetching dismissed jobs:", error);
-      }
-    } else {
-      const dismissed = localStorage.getItem(DISMISSED_JOBS_KEY);
-      if (dismissed) {
-        setDismissedJobIds(new Set(JSON.parse(dismissed)));
-      }
-    }
-  };
-
-  const fetchJobs = async ({
+  const fetchJobs = useCallback(async ({
     announceResult = false,
   }: { announceResult?: boolean } = {}) => {
     setLoading(true);
@@ -380,22 +399,6 @@ export const JobList = ({
     }
   };
 
-  const fetchSavedJobs = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("saved_jobs")
-        .select("job_id")
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-      setSavedJobIds(new Set(data.map((item) => item.job_id)));
-    } catch (error) {
-      console.error("Error fetching saved jobs:", error);
-    }
-  };
-
   const handleSave = async (jobId: string) => {
     if (!user) {
       navigate("/auth?mode=signup");
@@ -404,40 +407,25 @@ export const JobList = ({
 
     try {
       if (savedJobIds.has(jobId)) {
-        const { error } = await supabase
-          .from("saved_jobs")
-          .delete()
-          .eq("job_id", jobId)
-          .eq("user_id", user.id);
-
-        if (error) throw error;
-
-        const newSaved = new Set(savedJobIds);
-        newSaved.delete(jobId);
-        setSavedJobIds(newSaved);
+        await unsaveJob(jobId);
 
         toast({
           title: "Job removed",
           description: "Job removed from saved list",
         });
       } else {
-        const { error } = await supabase
-          .from("saved_jobs")
-          .insert({ job_id: jobId, user_id: user.id });
-
-        if (error) throw error;
-
-        setSavedJobIds(new Set([...savedJobIds, jobId]));
+        await saveJob(jobId);
 
         toast({
           title: "Job saved!",
           description: "Job added to your saved list",
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       toast({
         title: "Error",
-        description: error.message || "Failed to save job",
+        description: message || "Failed to save job",
         variant: "destructive",
       });
     }
@@ -504,10 +492,10 @@ export const JobList = ({
         title: "Jobs dismissed",
         description: `${count} job(s) removed from results`,
       });
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "Error",
-        description: error.message || "Failed to dismiss jobs",
+        description: error instanceof Error ? error.message : "Failed to dismiss jobs",
         variant: "destructive",
       });
     }
@@ -616,57 +604,158 @@ export const JobList = ({
           </div>
         )}
 
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4 flex-wrap">
-            <h2 className="text-2xl font-semibold">
-              Results <span className="text-primary">{jobs.length}</span>
-            </h2>
-            {totalDuplicatesMerged > 0 && (
-              <Badge
-                variant="outline"
-                className="text-blue-600 border-blue-600"
-              >
-                {totalDuplicatesMerged} duplicates merged
-              </Badge>
-            )}
-            {jobs.length > 0 && (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={selectAll}
-                    onCheckedChange={handleSelectAll}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    Select all
-                  </span>
-                </div>
-                {selectedJobs.size > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearSelected}
-                    className="h-8 text-xs text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-3 w-3 mr-1" />
-                    Delete ({selectedJobs.size})
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-          <Select
-            value={sortBy}
-            onValueChange={(v) => setSortBy(v as "relevance" | "date")}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="relevance">Sort by: Relevance</SelectItem>
-              <SelectItem value="date">Sort by: Date</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+       <div className="space-y-4">
+
+  <div className="flex items-center justify-between flex-wrap gap-4">
+
+    <div className="flex items-center gap-4 flex-wrap">
+
+      <h2 className="text-2xl font-semibold">
+        Results <span className="text-primary">{jobs.length}</span>
+      </h2>
+
+      {totalDuplicatesMerged > 0 && (
+        <Badge variant="outline">
+          {totalDuplicatesMerged} duplicates merged
+        </Badge>
+      )}
+
+    </div>
+
+  </div>
+
+  {/* Quick Filters */}
+
+  <div className="flex flex-wrap gap-2">
+
+    <Button
+      variant={jobTypeFilter === "remote" ? "default" : "outline"}
+      onClick={() =>
+        setJobTypeFilter(
+          jobTypeFilter === "remote"
+            ? "all"
+            : "remote"
+        )
+      }
+    >
+      Remote
+    </Button>
+
+    <Button
+      variant={jobTypeFilter === "fulltime" ? "default" : "outline"}
+      onClick={() =>
+        setJobTypeFilter(
+          jobTypeFilter === "fulltime"
+            ? "all"
+            : "fulltime"
+        )
+      }
+    >
+      Full-Time
+    </Button>
+
+    <Button
+      variant={jobTypeFilter === "contract" ? "default" : "outline"}
+      onClick={() =>
+        setJobTypeFilter(
+          jobTypeFilter === "contract"
+            ? "all"
+            : "contract"
+        )
+      }
+    >
+      Contract
+    </Button>
+
+  </div>
+
+  {/* Dropdowns */}
+
+  <div className="grid md:grid-cols-3 gap-3">
+
+    <Select
+      value={salaryFilter}
+      onValueChange={setSalaryFilter}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder="Salary" />
+      </SelectTrigger>
+
+      <SelectContent>
+
+        <SelectItem value="all">
+          Salary
+        </SelectItem>
+
+        <SelectItem value="100">
+          ₦100k+
+        </SelectItem>
+
+        <SelectItem value="250">
+          ₦250k+
+        </SelectItem>
+
+      </SelectContent>
+
+    </Select>
+
+    <Select
+      value={experienceFilter}
+      onValueChange={setExperienceFilter}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder="Experience" />
+      </SelectTrigger>
+
+      <SelectContent>
+
+        <SelectItem value="all">
+          Any
+        </SelectItem>
+
+        <SelectItem value="entry">
+          Entry
+        </SelectItem>
+
+        <SelectItem value="mid">
+          Mid
+        </SelectItem>
+
+        <SelectItem value="senior">
+          Senior
+        </SelectItem>
+
+      </SelectContent>
+
+    </Select>
+
+    <Select
+      value={sortBy}
+      onValueChange={(v) =>
+        setSortBy(v as "relevance" | "date")
+      }
+    >
+      <SelectTrigger>
+        <SelectValue />
+      </SelectTrigger>
+
+      <SelectContent>
+
+        <SelectItem value="relevance">
+          Relevance
+        </SelectItem>
+
+        <SelectItem value="date">
+          Recency
+        </SelectItem>
+
+      </SelectContent>
+
+    </Select>
+
+  </div>
+
+</div>
 
         <div className="space-y-4">
           {jobs.length === 0 ? (
