@@ -397,7 +397,7 @@ const [experienceFilter, setExperienceFilter] = useState("all");
     } finally {
       setLoading(false);
     }
-  };
+  })
 
   const handleSave = async (jobId: string) => {
     if (!user) {
