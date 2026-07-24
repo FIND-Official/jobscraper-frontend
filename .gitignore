@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 supabase/.temp/
 supabase/.remote_public_schema_dump.sql
+.env
