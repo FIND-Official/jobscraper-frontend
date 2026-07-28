@@ -12,7 +12,8 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import Account from "./pages/Account";
 import ResetPassword from "./pages/ResetPassword";
-import Auth from "./pages/Auth"; 
+import Auth from "./pages/Auth";
+import Partnership from "./pages/Partnership";
 import { SavedJobsProvider } from "./contexts/SavedJobsContext";
 
 
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/cleanup" element={<Cleanup />} />
+            <Route path="/partnership" element={<Partnership />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
