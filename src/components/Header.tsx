@@ -32,6 +32,14 @@ export const Header = () => {
           >
             Pricing
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/partnership")}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            Partners
+          </Button>
         </div>
 
         {/* Right section */}
