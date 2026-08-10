@@ -38,7 +38,7 @@ export const Header = () => {
             onClick={() => navigate("/partnership")}
             className="text-muted-foreground hover:text-foreground"
           >
-            Partners
+            Partner with us
           </Button>
         </div>
 
