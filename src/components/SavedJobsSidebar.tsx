@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Download, Trash2, CreditCard, Archive, ArchiveRestore, X, Bookmark } from "lucide-react";
+import { Download, Trash2, Archive, ArchiveRestore, Bookmark } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,8 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { PricingDialog } from "./PricingDialog";
 import { format } from "date-fns";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useSavedJobs } from "@/contexts/SavedJobsContext";
-
+import { useSavedJobs, type SavedJob } from "@/contexts/SavedJobsContext";
 
 interface ArchivedJob {
   id: string;
@@ -36,11 +35,16 @@ interface GroupedJobs<T> {
 export const SavedJobsSidebar = () => {
   const { user, subscriptionTier } = useAuth();
   const isMobile = useIsMobile();
-  const { savedJobs, saveJob, unsaveJob, refreshSavedJobs } = useSavedJobs();
+  const {
+    savedJobs,
+    loading,
+    refreshSavedJobs,
+    removeSavedJobById,
+    removeSavedJobsByIds,
+  } = useSavedJobs();
   const [archivedJobs, setArchivedJobs] = useState<ArchivedJob[]>([]);
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [selectedArchivedJobs, setSelectedArchivedJobs] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
   const [selectAllArchived, setSelectAllArchived] = useState(false);
@@ -116,44 +120,30 @@ export const SavedJobsSidebar = () => {
   }, [user]);
 
   useEffect(() => {
-    // refresh saved jobs from context
-    refreshSavedJobs();
-    fetchArchivedJobs();
+    void fetchArchivedJobs();
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
 
     const channel = supabase
-      .channel('saved-jobs-changes')
+      .channel(`archived-jobs-changes-${user.id}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'saved_jobs',
-          filter: `user_id=eq.${user.id}`
+          event: "*",
+          schema: "public",
+          table: "archived_jobs",
+          filter: `user_id=eq.${user.id}`,
         },
         () => {
-          refreshSavedJobs();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'archived_jobs',
-          filter: `user_id=eq.${user.id}`
+          void fetchArchivedJobs();
         },
-        () => {
-          fetchArchivedJobs();
-        }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
   }, [user]);
 
@@ -201,23 +191,18 @@ export const SavedJobsSidebar = () => {
 
   const handleDeleteSelected = async () => {
     if (selectedJobs.size === 0) return;
+    const count = selectedJobs.size;
 
     try {
-      const { error } = await supabase
-        .from("saved_jobs")
-        .delete()
-        .in("id", Array.from(selectedJobs));
-
-      if (error) throw error;
-      await refreshSavedJobs();
+      await removeSavedJobsByIds(Array.from(selectedJobs));
       setSelectedJobs(new Set());
       setSelectAll(false);
 
       toast({
         title: "Jobs removed",
-        description: `${selectedJobs.size} job(s) removed from saved list`,
+        description: `${count} job(s) removed from saved list`,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to remove jobs",
@@ -230,29 +215,38 @@ export const SavedJobsSidebar = () => {
     if (selectedJobs.size === 0 || !user) return;
 
     try {
-      // Get the job_ids of selected saved jobs
-      const jobsToArchive = savedJobs.filter(job => selectedJobs.has(job.id));
+      const jobsToArchive = savedJobs.filter((job) => selectedJobs.has(job.id));
+      const selectedIds = Array.from(selectedJobs);
 
-      // Insert into archived_jobs
+      // ignoreDuplicates => ON CONFLICT DO NOTHING (no UPDATE policy on archived_jobs)
       const { error: archiveError } = await supabase
         .from("archived_jobs")
         .upsert(
-          jobsToArchive.map(job => ({
+          jobsToArchive.map((job) => ({
             user_id: user.id,
             job_id: job.job_id,
           })),
-          { onConflict: 'user_id,job_id' }
+          { onConflict: "user_id,job_id", ignoreDuplicates: true },
         );
 
       if (archiveError) throw archiveError;
 
-      // Remove from saved_jobs
-      const { error: deleteError } = await supabase
-        .from("saved_jobs")
-        .delete()
-        .in("id", Array.from(selectedJobs));
+      await removeSavedJobsByIds(selectedIds);
 
-      if (deleteError) throw deleteError;
+      const archivedAt = new Date().toISOString();
+      setArchivedJobs((prev) => {
+        const existingIds = new Set(prev.map((job) => job.job_id));
+        const fresh = jobsToArchive
+          .filter((job) => !existingIds.has(job.job_id))
+          .map((job) => ({
+            id: `temp-${job.job_id}`,
+            job_id: job.job_id,
+            archived_at: archivedAt,
+            jobs: job.jobs,
+          }));
+        return [...fresh, ...prev];
+      });
+      void fetchArchivedJobs();
 
       setSelectedJobs(new Set());
       setSelectAll(false);
@@ -261,15 +255,14 @@ export const SavedJobsSidebar = () => {
         title: "Jobs archived",
         description: `${jobsToArchive.length} job(s) moved to archive`,
       });
-
-      fetchSavedJobs();
-      fetchArchivedJobs();
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to archive jobs",
         variant: "destructive",
       });
+      void refreshSavedJobs();
+      void fetchArchivedJobs();
     }
   };
 
@@ -277,62 +270,63 @@ export const SavedJobsSidebar = () => {
     if (selectedArchivedJobs.size === 0 || !user) return;
 
     try {
-      const jobsToRestore = archivedJobs.filter(job => selectedArchivedJobs.has(job.id));
+      const jobsToRestore = archivedJobs.filter((job) =>
+        selectedArchivedJobs.has(job.id),
+      );
+      const archivedIds = Array.from(selectedArchivedJobs);
 
-      // Insert back into saved_jobs
       const { error: saveError } = await supabase
         .from("saved_jobs")
         .upsert(
-          jobsToRestore.map(job => ({
+          jobsToRestore.map((job) => ({
             user_id: user.id,
             job_id: job.job_id,
           })),
-          { onConflict: 'user_id,job_id', ignoreDuplicates: true }
+          { onConflict: "user_id,job_id", ignoreDuplicates: true },
         );
 
       if (saveError) throw saveError;
 
-      // Remove from archived_jobs
       const { error: deleteError } = await supabase
         .from("archived_jobs")
         .delete()
-        .in("id", Array.from(selectedArchivedJobs));
+        .in("id", archivedIds);
 
       if (deleteError) throw deleteError;
 
+      setArchivedJobs((prev) => prev.filter((job) => !selectedArchivedJobs.has(job.id)));
       setSelectedArchivedJobs(new Set());
       setSelectAllArchived(false);
+      await refreshSavedJobs();
 
       toast({
         title: "Jobs restored",
         description: `${jobsToRestore.length} job(s) restored to saved list`,
       });
-
-      fetchSavedJobs();
-      fetchArchivedJobs();
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to restore jobs",
         variant: "destructive",
       });
+      void refreshSavedJobs();
+      void fetchArchivedJobs();
     }
   };
 
   const handleDelete = async (savedJobId: string) => {
     try {
-      const { error } = await supabase
-        .from("saved_jobs")
-        .delete()
-        .eq("id", savedJobId);
-
-      if (error) throw error;
-      await refreshSavedJobs();
+      await removeSavedJobById(savedJobId);
+      setSelectedJobs((prev) => {
+        const next = new Set(prev);
+        next.delete(savedJobId);
+        return next;
+      });
       toast({
         title: "Job removed",
         description: "Job removed from saved list",
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to remove job",
@@ -350,12 +344,17 @@ export const SavedJobsSidebar = () => {
 
       if (error) throw error;
 
-      setArchivedJobs(archivedJobs.filter(job => job.id !== archivedJobId));
+      setArchivedJobs((prev) => prev.filter((job) => job.id !== archivedJobId));
+      setSelectedArchivedJobs((prev) => {
+        const next = new Set(prev);
+        next.delete(archivedJobId);
+        return next;
+      });
       toast({
         title: "Job removed",
         description: "Job removed from archive",
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to remove job",
