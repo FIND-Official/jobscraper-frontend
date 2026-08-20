@@ -204,28 +204,12 @@ const [experienceFilter, setExperienceFilter] = useState("all");
     }
   }, [user]);
 
-  const fetchSavedJobs = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("saved_jobs")
-        .select("job_id")
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-      setSavedJobIds(new Set(data.map((item) => item.job_id)));
-    } catch (error) {
-      console.error("Error fetching saved jobs:", error);
-    }
-  }, [user]);
-
   useEffect(() => {
     fetchDismissedJobs();
     if (user) {
       loadExportedJobs();
     }
-  }, [user, fetchDismissedJobs, fetchSavedJobs]);
+  }, [user, fetchDismissedJobs]);
 
   useEffect(() => {
     fetchJobs();
@@ -243,30 +227,6 @@ const [experienceFilter, setExperienceFilter] = useState("all");
       fetchJobs();
     }
   }, [scrapeSessions]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const channel = supabase
-      .channel("job-list-saved-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "saved_jobs",
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          refreshSavedJobs();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
 
   const loadExportedJobs = () => {
     if (!user) return;
@@ -397,13 +357,15 @@ const [experienceFilter, setExperienceFilter] = useState("all");
     } finally {
       setLoading(false);
     }
-  })
+  }, [scrapeSessions, dismissedJobIds, supabase, setLoading, toast, setJobs, setCurrentPage, setSelectedJobs, setSelectAll, onSessionResultCount, lastAnnouncedRefresh]);
 
   const handleSave = async (jobId: string) => {
     if (!user) {
       navigate("/auth?mode=signup");
       return;
     }
+
+    const job = jobs.find((item) => item.id === jobId);
 
     try {
       if (savedJobIds.has(jobId)) {
@@ -414,7 +376,17 @@ const [experienceFilter, setExperienceFilter] = useState("all");
           description: "Job removed from saved list",
         });
       } else {
-        await saveJob(jobId);
+        await saveJob(
+          jobId,
+          job
+            ? {
+                title: job.title,
+                company: job.company,
+                location: job.location,
+                apply_url: job.apply_url,
+              }
+            : undefined,
+        );
 
         toast({
           title: "Job saved!",
