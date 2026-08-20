@@ -217,36 +217,49 @@ export const SavedJobsSidebar = () => {
     try {
       const jobsToArchive = savedJobs.filter((job) => selectedJobs.has(job.id));
       const selectedIds = Array.from(selectedJobs);
+      const archivedJobIds = new Set(archivedJobs.map((job) => job.job_id));
+      const rowsToArchive = jobsToArchive
+        .filter((job) => !archivedJobIds.has(job.job_id))
+        .map((job) => ({
+          user_id: user.id,
+          job_id: job.job_id,
+        }));
 
-      // ignoreDuplicates => ON CONFLICT DO NOTHING (no UPDATE policy on archived_jobs)
-      const { error: archiveError } = await supabase
-        .from("archived_jobs")
-        .upsert(
-          jobsToArchive.map((job) => ({
-            user_id: user.id,
-            job_id: job.job_id,
-          })),
-          { onConflict: "user_id,job_id", ignoreDuplicates: true },
-        );
-
-      if (archiveError) throw archiveError;
+      let insertedArchivedRows: any[] = [];
+      if (rowsToArchive.length > 0) {
+        const { data: inserted, error: archiveError } = await supabase
+          .from("archived_jobs")
+          .insert(rowsToArchive)
+          .select("id, job_id, archived_at, jobs(title, company, location, apply_url)");
+        if (archiveError) throw archiveError;
+        insertedArchivedRows = inserted || [];
+      }
 
       await removeSavedJobsByIds(selectedIds);
 
-      const archivedAt = new Date().toISOString();
       setArchivedJobs((prev) => {
         const existingIds = new Set(prev.map((job) => job.job_id));
-        const fresh = jobsToArchive
-          .filter((job) => !existingIds.has(job.job_id))
+
+        const freshFromInsert = insertedArchivedRows
+          .filter((r) => !existingIds.has(r.job_id))
+          .map((r) => ({
+            id: r.id,
+            job_id: r.job_id,
+            archived_at: r.archived_at,
+            jobs: r.jobs,
+          }));
+
+        const freshTemps = jobsToArchive
+          .filter((job) => !existingIds.has(job.job_id) && !freshFromInsert.some((f) => f.job_id === job.job_id))
           .map((job) => ({
             id: `temp-${job.job_id}`,
             job_id: job.job_id,
-            archived_at: archivedAt,
+            archived_at: new Date().toISOString(),
             jobs: job.jobs,
           }));
-        return [...fresh, ...prev];
+
+        return [...freshFromInsert, ...freshTemps, ...prev];
       });
-      void fetchArchivedJobs();
 
       setSelectedJobs(new Set());
       setSelectAll(false);
@@ -255,7 +268,8 @@ export const SavedJobsSidebar = () => {
         title: "Jobs archived",
         description: `${jobsToArchive.length} job(s) moved to archive`,
       });
-    } catch {
+    } catch (error) {
+      console.error("Failed to archive jobs:", error);
       toast({
         title: "Error",
         description: "Failed to archive jobs",
@@ -274,18 +288,21 @@ export const SavedJobsSidebar = () => {
         selectedArchivedJobs.has(job.id),
       );
       const archivedIds = Array.from(selectedArchivedJobs);
+      const savedJobIds = new Set(savedJobs.map((job) => job.job_id));
+      const rowsToRestore = jobsToRestore
+        .filter((job) => !savedJobIds.has(job.job_id))
+        .map((job) => ({
+          user_id: user.id,
+          job_id: job.job_id,
+        }));
 
-      const { error: saveError } = await supabase
-        .from("saved_jobs")
-        .upsert(
-          jobsToRestore.map((job) => ({
-            user_id: user.id,
-            job_id: job.job_id,
-          })),
-          { onConflict: "user_id,job_id", ignoreDuplicates: true },
-        );
-
-      if (saveError) throw saveError;
+      if (rowsToRestore.length > 0) {
+        const { data: inserted, error: saveError } = await supabase
+          .from("saved_jobs")
+          .insert(rowsToRestore)
+          .select("id, job_id, saved_at, jobs(title, company, location, apply_url)");
+        if (saveError) throw saveError;
+      }
 
       const { error: deleteError } = await supabase
         .from("archived_jobs")
@@ -303,7 +320,8 @@ export const SavedJobsSidebar = () => {
         title: "Jobs restored",
         description: `${jobsToRestore.length} job(s) restored to saved list`,
       });
-    } catch {
+    } catch (error) {
+      console.error("Failed to restore jobs:", error);
       toast({
         title: "Error",
         description: "Failed to restore jobs",
