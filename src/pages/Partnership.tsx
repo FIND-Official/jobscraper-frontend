@@ -1,6 +1,9 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { BackToTop } from "@/components/BackToTop";
+import { ContactDialog } from "@/components/ContactDialog";
 import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +21,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
-  Check,
   Globe,
   TrendingUp,
   Users,
@@ -31,14 +33,11 @@ import {
   MapPin,
   Clock,
   Building2,
-  Star,
-  Quote,
   Mail,
 } from "lucide-react";
 
-const PARTNER_FORM_URL = "https://forms.gle/tEWwQv6YcmtmTKqB9";
-
 const Partnership = () => {
+  const [contactOpen, setContactOpen] = useState(false);
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
       <SEO
@@ -66,17 +65,15 @@ const Partnership = () => {
             qualified candidates actively seeking remote opportunities across
             multiple trusted job boards.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="flex items-center justify-center">
+            {/* Commented out per coordinator requirements:
             <Button size="lg" className="px-8 w-full sm:w-auto" asChild>
-              <a
-                href={PARTNER_FORM_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <Link to="/company/auth?mode=signup">
                 Partner with us
                 <ArrowRight className="h-4 w-4 ml-2" />
-              </a>
+              </Link>
             </Button>
+            */}
             <Button
               size="lg"
               variant="outline"
@@ -148,7 +145,8 @@ const Partnership = () => {
           </div>
         </section>
 
-        {/* ============ TRUSTED BY STRIP ============ */}
+        {/* ============ TRUSTED BY STRIP (Commented out placeholder social proof) ============ */}
+        {/*
         <section className="mt-20">
           <p className="text-center text-sm uppercase tracking-widest text-muted-foreground mb-6">
             Trusted by hiring teams at
@@ -166,8 +164,10 @@ const Partnership = () => {
             )}
           </div>
         </section>
+        */}
 
-        {/* ============ VALUE PROPOSITION ============ */}
+        {/* ============ VALUE PROPOSITION (Commented out per coordinator feedback) ============ */}
+        {/*
         <section className="mt-24 md:mt-32">
           <div className="max-w-3xl mx-auto text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
@@ -198,8 +198,10 @@ const Partnership = () => {
             ))}
           </div>
         </section>
+        */}
 
-        {/* ============ WHY PARTNER (banded) ============ */}
+        {/* ============ WHY PARTNER / EMPLOYER BENEFITS (Commented out per coordinator feedback) ============ */}
+        {/*
         <section className="mt-24 md:mt-32 -mx-4 sm:-mx-6 lg:-mx-8 bg-card border-y border-border py-16 md:py-24">
           <div className="max-w-3xl mx-auto text-center mb-12 px-4">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
@@ -264,6 +266,7 @@ const Partnership = () => {
             ))}
           </div>
         </section>
+        */}
 
         {/* ============ HOW IT WORKS ============ */}
         <section id="how-it-works" className="mt-24 md:mt-32 scroll-mt-28">
@@ -329,7 +332,8 @@ const Partnership = () => {
           </div>
         </section>
 
-        {/* ============ WHY COMPANIES CHOOSE FIND ============ */}
+        {/* ============ WHY COMPANIES CHOOSE FIND (Commented out per coordinator feedback) ============ */}
+        {/*
         <section className="mt-24 md:mt-32">
           <div className="max-w-3xl mx-auto text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
@@ -366,7 +370,6 @@ const Partnership = () => {
               </CardContent>
             </Card>
 
-            {/* Testimonial */}
             <Card className="bg-card border-primary/20">
               <CardContent className="p-8">
                 <figure className="h-full flex flex-col justify-between">
@@ -414,8 +417,10 @@ const Partnership = () => {
             </Card>
           </div>
         </section>
+        */}
 
-        {/* ============ TRUSTED BOARDS (banded) ============ */}
+        {/* ============ TRUSTED BOARDS (banded) (Commented out per coordinator feedback) ============ */}
+        {/*
         <section className="mt-24 md:mt-32 -mx-4 sm:-mx-6 lg:-mx-8 bg-card border-y border-border py-16 md:py-24">
           <div className="max-w-3xl mx-auto text-center mb-12 px-4">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
@@ -447,6 +452,7 @@ const Partnership = () => {
             ))}
           </div>
         </section>
+        */}
 
         {/* ============ FAQ ============ */}
         <section className="mt-24 md:mt-32 max-w-3xl mx-auto">
@@ -507,14 +513,8 @@ const Partnership = () => {
             <p className="text-muted-foreground mb-4">
               Still have questions about partnering with FIND?
             </p>
-            <Button variant="outline" asChild>
-              <a
-                href={PARTNER_FORM_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Contact our team
-              </a>
+            <Button variant="outline" onClick={() => setContactOpen(true)}>
+              Contact our team
             </Button>
           </div>
         </section>
@@ -531,30 +531,12 @@ const Partnership = () => {
                 connect them with exceptional remote candidates. Get started
                 today.
               </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <div className="flex items-center justify-center">
                 <Button size="lg" className="px-10 w-full sm:w-auto" asChild>
-                  <a
-                    href={PARTNER_FORM_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Post your jobs
+                  <Link to="/company/auth?mode=signup">
+                    Partner with us
                     <ArrowRight className="h-4 w-4 ml-2" />
-                  </a>
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="px-10 w-full sm:w-auto"
-                  asChild
-                >
-                  <a
-                    href={PARTNER_FORM_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Talk to our team
-                  </a>
+                  </Link>
                 </Button>
               </div>
             </CardContent>
@@ -564,6 +546,7 @@ const Partnership = () => {
 
       <Footer />
       <BackToTop />
+      <ContactDialog open={contactOpen} onOpenChange={setContactOpen} />
     </div>
   );
 };

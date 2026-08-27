@@ -1,0 +1,14 @@
+{
+  "tasks": {
+    "serve": "deno run --allow-net --allow-env --allow-read ./index.ts"
+  },
+  "imports": {
+    "std/": "https://deno.land/std@0.190.0/",
+    "mongodb": "npm:mongodb@6.12.0"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window"],
+    "strict": true,
+    "esModuleInterop": true
+  }
+}

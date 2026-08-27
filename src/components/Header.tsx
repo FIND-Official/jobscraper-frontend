@@ -1,6 +1,7 @@
-import {  LogIn } from "lucide-react";
+import { LogIn, Building2 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCompanyAuth } from "@/contexts/CompanyAuthContext";
 import { Button } from "@/components/ui/button";
 import { ProfileDropdown } from "./ProfileDropdown";
 import { PricingDialog } from "./PricingDialog";
@@ -8,13 +9,14 @@ import { useNavigate } from "react-router-dom";
 
 export const Header = () => {
   const { user } = useAuth();
+  const { companyUser, isAuthenticated: isCompanyAuth } = useCompanyAuth();
   const [pricingOpen, setPricingOpen] = useState(false);
   const navigate = useNavigate();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        
+
         {/* Left section */}
         <div className="flex items-center gap-4 sm:gap-6">
           <a
@@ -35,7 +37,13 @@ export const Header = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/partnership")}
+            onClick={() => {
+              if (isCompanyAuth || companyUser) {
+                navigate("/company/dashboard");
+              } else {
+                navigate("/partnership");
+              }
+            }}
             className="text-muted-foreground hover:text-foreground"
           >
             Partner with us
@@ -43,8 +51,8 @@ export const Header = () => {
         </div>
 
         {/* Right section */}
-         <div className="flex items-center">
-          {user ? (
+        <div className="flex items-center">
+          {user || (isCompanyAuth && companyUser) ? (
             <ProfileDropdown />
           ) : (
             <Button
