@@ -158,7 +158,7 @@ export const JobList = ({
   refreshTrigger,
 }: JobListProps) => {
   const { user } = useAuth();
-  const { savedJobIds, saveJob, unsaveJob } = useSavedJobs();
+  const { savedJobIds, saveJob, unsaveJob, refreshSavedJobs } = useSavedJobs();
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<DeduplicatedJob[]>([]);
   const [exportedJobIds, setExportedJobIds] = useState<Set<string>>(new Set());
@@ -227,6 +227,30 @@ const [experienceFilter, setExperienceFilter] = useState("all");
       fetchJobs();
     }
   }, [scrapeSessions]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel("job-list-saved-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "saved_jobs",
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          refreshSavedJobs();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   const loadExportedJobs = () => {
     if (!user) return;
@@ -357,15 +381,13 @@ const [experienceFilter, setExperienceFilter] = useState("all");
     } finally {
       setLoading(false);
     }
-  }, [scrapeSessions, dismissedJobIds, supabase, setLoading, toast, setJobs, setCurrentPage, setSelectedJobs, setSelectAll, onSessionResultCount, lastAnnouncedRefresh]);
+  }, [scrapeSessions, dismissedJobIds, refreshTrigger, onSessionResultCount]);
 
   const handleSave = async (jobId: string) => {
     if (!user) {
       navigate("/auth?mode=signup");
       return;
     }
-
-    const job = jobs.find((item) => item.id === jobId);
 
     try {
       if (savedJobIds.has(jobId)) {
@@ -376,17 +398,7 @@ const [experienceFilter, setExperienceFilter] = useState("all");
           description: "Job removed from saved list",
         });
       } else {
-        await saveJob(
-          jobId,
-          job
-            ? {
-                title: job.title,
-                company: job.company,
-                location: job.location,
-                apply_url: job.apply_url,
-              }
-            : undefined,
-        );
+        await saveJob(jobId);
 
         toast({
           title: "Job saved!",

@@ -1,6 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {supabase} from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
+
+
 
 export interface SavedJob {
   id: string;
@@ -15,211 +17,94 @@ export interface SavedJob {
 }
 
 interface SavedJobsContextType {
-  savedJobs: SavedJob[];
-  savedJobIds: Set<string>;
-  loading: boolean;
-  refreshSavedJobs: () => Promise<void>;
-  saveJob: (
-    jobId: string,
-    jobDetails?: {
-      title: string;
-      company: string;
-      location: string;
-      apply_url: string;
-    },
-  ) => Promise<void>;
-  unsaveJob: (jobId: string) => Promise<void>;
-  removeSavedJobById: (savedJobId: string) => Promise<void>;
-  removeSavedJobsByIds: (savedJobIds: string[]) => Promise<void>;
+    savedJobs: SavedJob[];
+    savedJobIds : Set<string>;
+    loading: boolean;
+    refreshSavedJobs: () => Promise<void>;
+    saveJob: (jobId: string) => Promise<void>;
+    unsaveJob: (jobId: string) => Promise<void>;
 }
 
 const SavedJobsContext = createContext<SavedJobsContextType | undefined>(undefined);
-
 export const SavedJobsProvider = ({ children }: { children: React.ReactNode }) => {
-  const { user } = useAuth();
-  const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
-  const [loading, setLoading] = useState(true);
+    const { user } = useAuth();
+    const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
+    const [loading, setLoading] = useState(true)
 
-  const refreshSavedJobs = useCallback(async (opts?: { showLoading?: boolean }) => {
-    if (!user) {
-      setSavedJobs([]);
-      setLoading(false);
-      return;
-    }
+    const refreshSavedJobs = async () =>{
+        if (!user) {
+            setSavedJobs([]);
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
+        const { data, error } = await supabase
+            .from("saved_jobs")
+            .select("id, job_id, saved_at, jobs(title, company, location, apply_url)")
+            .eq("user_id", user.id)
+            .order("saved_at", { ascending: false });
 
-    if (opts?.showLoading) setLoading(true);
-
-    const { data, error } = await supabase
-      .from("saved_jobs")
-      .select("id, job_id, saved_at, jobs(title, company, location, apply_url)")
-      .eq("user_id", user.id)
-      .order("saved_at", { ascending: false });
-
-    if (!error && data) {
-      setSavedJobs(data as SavedJob[]);
-    }
-    setLoading(false);
-  }, [user]);
-
-  useEffect(() => {
-    void refreshSavedJobs({ showLoading: true });
-  }, [refreshSavedJobs]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const channel = supabase
-      .channel(`saved-jobs-${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "saved_jobs",
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          void refreshSavedJobs();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
+        if (!error && data) setSavedJobs(data);
+        setLoading(false);
     };
-  }, [user, refreshSavedJobs]);
 
-  const savedJobIds = useMemo(
-    () => new Set(savedJobs.map((job) => job.job_id)),
-    [savedJobs],
-  );
+    useEffect(() => {
+        refreshSavedJobs();
+    }, [user?.id]);
 
-  const saveJob = async (
-    jobId: string,
-    jobDetails?: {
-      title: string;
-      company: string;
-      location: string;
-      apply_url: string;
-    },
-  ) => {
-    if (!user) return;
-    if (savedJobIds.has(jobId)) return;
+    useEffect(() => {
+        if (!user) return
+        const channel = supabase
+            .channel("saved-jobs")
+            .on(
+                "postgres_changes",
+                {event: "*", schema: "public", table: "saved_jobs", filter: `user_id=eq.${user.id}`},
+                () => {
+                    refreshSavedJobs();
+                }
+            )
+            .subscribe();
+            return () => {
+                void supabase.removeChannel(channel);
+            };
+    }, [user?.id]);
 
-    const tempId = `temp-${jobId}`;
-    const previous = savedJobs;
+    const savedJobIds = useMemo(
+        () => new Set(savedJobs.map((job) => job.job_id)),
+        [savedJobs]
+    );
 
-    if (jobDetails) {
-      setSavedJobs((prev) => {
-        if (prev.some((job) => job.job_id === jobId)) return prev;
-        return [
-          {
-            id: tempId,
-            job_id: jobId,
-            saved_at: new Date().toISOString(),
-            jobs: jobDetails,
-          },
-          ...prev,
-        ];
-      });
-    }
+    const saveJob = async (jobId: string) => {
+        if (!user) return;
+        const { error } = await supabase
+            .from("saved_jobs")
+            .insert({ job_id: jobId, user_id: user.id });
+        if (error) throw error;
+        await refreshSavedJobs();
+    };
 
-    const { data, error } = await supabase
-      .from("saved_jobs")
-      .insert({ job_id: jobId, user_id: user.id })
-      .select("id, job_id, saved_at, jobs(title, company, location, apply_url)")
-      .single();
+    const unsaveJob = async (jobId: string) => {
+        if (!user) return;
+        const { error } = await supabase
+            .from("saved_jobs")
+            .delete()
+            .eq("job_id", jobId)
+            .eq("user_id", user.id);
+        if (error) throw error;
+        await refreshSavedJobs();
+    };
 
-    if (error) {
-      setSavedJobs(previous);
-      throw error;
-    }
-
-    if (data) {
-      setSavedJobs((prev) => [
-        data as SavedJob,
-        ...prev.filter((job) => job.job_id !== jobId),
-      ]);
-    }
-  };
-
-  const unsaveJob = async (jobId: string) => {
-    if (!user) return;
-
-    const previous = savedJobs;
-    setSavedJobs((prev) => prev.filter((job) => job.job_id !== jobId));
-
-    const { error } = await supabase
-      .from("saved_jobs")
-      .delete()
-      .eq("job_id", jobId)
-      .eq("user_id", user.id);
-
-    if (error) {
-      setSavedJobs(previous);
-      throw error;
-    }
-  };
-
-  const removeSavedJobById = async (savedJobId: string) => {
-    if (!user) return;
-
-    const previous = savedJobs;
-    setSavedJobs((prev) => prev.filter((job) => job.id !== savedJobId));
-
-    const { error } = await supabase
-      .from("saved_jobs")
-      .delete()
-      .eq("id", savedJobId)
-      .eq("user_id", user.id);
-
-    if (error) {
-      setSavedJobs(previous);
-      throw error;
-    }
-  };
-
-  const removeSavedJobsByIds = async (ids: string[]) => {
-    if (!user || ids.length === 0) return;
-
-    const idSet = new Set(ids);
-    const previous = savedJobs;
-    setSavedJobs((prev) => prev.filter((job) => !idSet.has(job.id)));
-
-    const { error } = await supabase
-      .from("saved_jobs")
-      .delete()
-      .in("id", ids)
-      .eq("user_id", user.id);
-
-    if (error) {
-      setSavedJobs(previous);
-      throw error;
-    }
-  };
-
-  return (
-    <SavedJobsContext.Provider
-      value={{
-        savedJobs,
-        savedJobIds,
-        loading,
-        refreshSavedJobs: () => refreshSavedJobs(),
-        saveJob,
-        unsaveJob,
-        removeSavedJobById,
-        removeSavedJobsByIds,
-      }}
-    >
-      {children}
-    </SavedJobsContext.Provider>
-  );
-};
+    return (
+        <SavedJobsContext.Provider value={{ savedJobs, savedJobIds, loading, refreshSavedJobs, saveJob, unsaveJob }}>
+            {children}
+        </SavedJobsContext.Provider>
+    );
+}
 
 export const useSavedJobs = () => {
-  const context = useContext(SavedJobsContext);
-  if (context === undefined) {
-    throw new Error("useSavedJobs must be used within a SavedJobsProvider");
-  }
-  return context;
+    const context = useContext(SavedJobsContext);
+    if (context === undefined) {
+        throw new Error("useSavedJobs must be used within a SavedJobsProvider");
+    }
+    return context;
 };

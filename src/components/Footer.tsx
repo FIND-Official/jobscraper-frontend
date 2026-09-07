@@ -55,12 +55,14 @@ export const Footer = () => {
                   Leave a Review
                 </a>
 
-                <Link
-                  to="/partnership"
+                <a
+                  href="https://forms.gle/tEWwQv6YcmtmTKqB9"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="whitespace-nowrap text-muted-foreground hover:text-primary transition-colors"
                 >
                   Partner with us
-                </Link>
+                </a>
 
                 <button
                   onClick={() => setShowContact(true)}

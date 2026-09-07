@@ -28,7 +28,7 @@ export const BackToTop = () => {
   return (
     <button
       onClick={scrollToTop}
-      className="fixed bottom-6 right-6 bg-pink-500 hover:bg-pink-400 text-white w-12 h-12 flex items-center justify-center rounded-full shadow-lg transition"
+      className="fixed bottom-6 right-6 bg-primary hover:bg-primary-glow text-primary-foreground w-12 h-12 flex items-center justify-center rounded-full shadow-glow transition-colors duration-300 ease-smooth"
     >
       ↑
     </button>
