@@ -4,7 +4,7 @@ import { useAuth } from "./AuthContext";
 
 
 
-interface SavedJob {
+export interface SavedJob {
   id: string;
   job_id: string;
   saved_at: string;
@@ -64,7 +64,9 @@ export const SavedJobsProvider = ({ children }: { children: React.ReactNode }) =
                 }
             )
             .subscribe();
-            return () => supabase.removeChannel(channel)
+            return () => {
+                void supabase.removeChannel(channel);
+            };
     }, [user?.id]);
 
     const savedJobIds = useMemo(

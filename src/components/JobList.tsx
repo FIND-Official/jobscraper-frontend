@@ -158,7 +158,7 @@ export const JobList = ({
   refreshTrigger,
 }: JobListProps) => {
   const { user } = useAuth();
-  const { savedJobIds, saveJob, unsaveJob } = useSavedJobs();
+  const { savedJobIds, saveJob, unsaveJob, refreshSavedJobs } = useSavedJobs();
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<DeduplicatedJob[]>([]);
   const [exportedJobIds, setExportedJobIds] = useState<Set<string>>(new Set());
@@ -204,28 +204,12 @@ const [experienceFilter, setExperienceFilter] = useState("all");
     }
   }, [user]);
 
-  const fetchSavedJobs = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("saved_jobs")
-        .select("job_id")
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-      setSavedJobIds(new Set(data.map((item) => item.job_id)));
-    } catch (error) {
-      console.error("Error fetching saved jobs:", error);
-    }
-  }, [user]);
-
   useEffect(() => {
     fetchDismissedJobs();
     if (user) {
       loadExportedJobs();
     }
-  }, [user, fetchDismissedJobs, fetchSavedJobs]);
+  }, [user, fetchDismissedJobs]);
 
   useEffect(() => {
     fetchJobs();

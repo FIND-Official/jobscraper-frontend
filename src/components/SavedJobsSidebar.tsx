@@ -10,7 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { PricingDialog } from "./PricingDialog";
 import { format } from "date-fns";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useSavedJobs } from "@/contexts/SavedJobsContext";
+import { useSavedJobs, type SavedJob } from "@/contexts/SavedJobsContext";
 
 
 interface ArchivedJob {
