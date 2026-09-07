@@ -381,7 +381,7 @@ const [experienceFilter, setExperienceFilter] = useState("all");
     } finally {
       setLoading(false);
     }
-  })
+  }, [scrapeSessions, dismissedJobIds, refreshTrigger, onSessionResultCount]);
 
   const handleSave = async (jobId: string) => {
     if (!user) {
