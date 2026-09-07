@@ -262,7 +262,7 @@ export const SavedJobsSidebar = () => {
         description: `${jobsToArchive.length} job(s) moved to archive`,
       });
 
-      fetchSavedJobs();
+      void refreshSavedJobs();
       fetchArchivedJobs();
     } catch (error) {
       toast({
@@ -308,7 +308,7 @@ export const SavedJobsSidebar = () => {
         description: `${jobsToRestore.length} job(s) restored to saved list`,
       });
 
-      fetchSavedJobs();
+      void refreshSavedJobs();
       fetchArchivedJobs();
     } catch (error) {
       toast({
