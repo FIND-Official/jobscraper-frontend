@@ -6,7 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Mail, Lock, User, ArrowLeft } from "lucide-react";
+import { Mail, Lock, User, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SEO } from "@/components/SEO";
 
@@ -22,6 +22,7 @@ export default function AuthPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState("");
 
   const { signUp, signIn, signInWithGoogle } = useAuth();
@@ -103,7 +104,7 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted px-4 py-8">
       <SEO
         title={isSignUp ? "Create Account — FIND JobScraper" : "Sign In — FIND JobScraper"}
-        description={isSignUp 
+        description={isSignUp
           ? "Sign up for FIND JobScraper to access aggregated remote job listings from multiple trusted boards."
           : "Sign in to your FIND JobScraper account to access saved jobs and advanced search features."
         }
@@ -217,15 +218,24 @@ export default function AuthPage() {
                   />
                 </Field>
 
-                <Field label="Password" icon={<Lock />}>
+                <Field label="Password" icon={<Lock />} rightSlot={
+                  <button
+                    type="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                }>
                   <Input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     placeholder="*******"
                     minLength={6}
-                    className="w-full rounded-lg border border-muted-foreground/30 focus:ring-2 focus:ring-primary focus:border-primary transition"
+                    className="w-full rounded-lg border border-muted-foreground/30 focus:ring-2 focus:ring-primary focus:border-primary transition pr-10"
                   />
                 </Field>
 
@@ -291,10 +301,12 @@ function Field({
   label,
   icon,
   children,
+  rightSlot,
 }: {
   label: string;
   icon: React.ReactNode;
   children: React.ReactNode;
+  rightSlot?: React.ReactNode;
 }) {
   return (
     <div className="space-y-1">
@@ -307,6 +319,7 @@ function Field({
           React.cloneElement(children, {
             className: `${children.props.className} pl-10`,
           })}
+        {rightSlot}
       </div>
     </div>
   );
