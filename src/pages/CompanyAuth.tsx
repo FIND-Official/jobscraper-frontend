@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { useCompanyAuth } from "@/contexts/CompanyAuthContext";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
-import { Mail, Lock, Building2, ArrowLeft, ArrowRight, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, Building2, ArrowLeft, ArrowRight, ShieldCheck, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { SEO } from "@/components/SEO";
 import { validateCompanyEmail } from "@/lib/companyValidation";
 
@@ -26,6 +26,8 @@ export default function CompanyAuth({ initialMode }: CompanyAuthProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
 
   const { companyUser, isAuthenticated, isOnboarded, signUp, signIn } = useCompanyAuth();
@@ -280,13 +282,21 @@ export default function CompanyAuth({ initialMode }: CompanyAuthProps) {
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="company-password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
-                      className="pl-9"
+                      className="pl-9 pr-10"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
                     />
+                    <button
+                      type="button"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                 </div>
 
@@ -297,13 +307,21 @@ export default function CompanyAuth({ initialMode }: CompanyAuthProps) {
                       <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="company-confirm-password"
-                        type="password"
+                        type={showConfirmPassword ? "text" : "password"}
                         placeholder="••••••••"
-                        className="pl-9"
+                        className="pl-9 pr-10"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         required
                       />
+                      <button
+                        type="button"
+                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                        onClick={() => setShowConfirmPassword((v) => !v)}
+                        className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
                     </div>
                   </div>
                 )}

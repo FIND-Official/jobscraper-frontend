@@ -4,6 +4,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { BackToTop } from "@/components/BackToTop";
 import { ContactDialog } from "@/components/ContactDialog";
+import { BookDemoDialog } from "@/components/BookDemoDialog";
 import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,7 @@ import {
 
 const Partnership = () => {
   const [contactOpen, setContactOpen] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
       <SEO
@@ -57,13 +59,12 @@ const Partnership = () => {
             For Employers & Recruiters
           </Badge>
           <h1 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
-            Reach Top Remote Talent{" "}
+            Reach Top Talent{" "}
             <span className="text-primary">Faster</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
-            Partner with FIND to showcase your job openings to thousands of
-            qualified candidates actively seeking remote opportunities across
-            multiple trusted job boards.
+            List your open roles directly on FIND to reach thousands of active
+            remote job seekers searching across our aggregated job feeds.
           </p>
           <div className="flex items-center justify-center">
             {/* Commented out per coordinator requirements:
@@ -300,7 +301,7 @@ const Partnership = () => {
                 icon: Briefcase,
                 title: "Post Your Jobs",
                 description:
-                  "Submit your openings and they get distributed across our trusted job boards.",
+                  "Submit your open roles to have them featured directly alongside top listings",
               },
               {
                 step: "04",
@@ -501,9 +502,16 @@ const Partnership = () => {
             <AccordionItem value="support">
               <AccordionTrigger>Do you offer support for partners?</AccordionTrigger>
               <AccordionContent>
-                Yes. Our partner success team is dedicated to helping you get
-                the most out of your partnership, from onboarding to ongoing
-                optimization of your job listings.
+                Yes! Our partner success team is available to help you set up
+                your listing feed and optimize your hiring reach. You can{" "}
+                <button
+                  type="button"
+                  className="text-primary underline underline-offset-2 hover:text-primary/80"
+                  onClick={() => setDemoOpen(true)}
+                >
+                  Book a Demo
+                </button>{" "}
+                to get a walkthrough of our platform.
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -531,12 +539,20 @@ const Partnership = () => {
                 connect them with exceptional remote candidates. Get started
                 today.
               </p>
-              <div className="flex items-center justify-center">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Button size="lg" className="px-10 w-full sm:w-auto" asChild>
                   <Link to="/company/auth?mode=signup">
                     Partner with us
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Link>
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="px-10 w-full sm:w-auto"
+                  onClick={() => setDemoOpen(true)}
+                >
+                  Book a Demo
                 </Button>
               </div>
             </CardContent>
@@ -547,6 +563,7 @@ const Partnership = () => {
       <Footer />
       <BackToTop />
       <ContactDialog open={contactOpen} onOpenChange={setContactOpen} />
+      <BookDemoDialog open={demoOpen} onOpenChange={setDemoOpen} />
     </div>
   );
 };
